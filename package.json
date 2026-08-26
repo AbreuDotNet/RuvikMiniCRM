@@ -1,0 +1,31 @@
+{
+  "name": "ruvik",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ruvik \u2014 mobile-first mini CRM marketplace for independent service professionals",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:api dev:web",
+    "dev:api": "npm run dev -w @ruvik/api",
+    "dev:web": "npm run dev -w @ruvik/web",
+    "build": "npm run build -w @ruvik/api && npm run build -w @ruvik/web",
+    "start": "npm run start -w @ruvik/api",
+    "migrate": "npm run migrate -w @ruvik/api",
+    "seed": "npm run seed -w @ruvik/api",
+    "worker": "npm run worker -w @ruvik/api",
+    "test": "npm run test -w @ruvik/api",
+    "test:security": "npm run test:security -w @ruvik/api",
+    "typecheck": "npm run typecheck -w @ruvik/api && npm run typecheck -w @ruvik/web",
+    "loadtest": "node loadtest/run.mjs",
+    "start:ci": "npm run start:ci -w @ruvik/api"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  }
+}

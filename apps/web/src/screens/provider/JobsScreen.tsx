@@ -1,0 +1,148 @@
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Shell } from '../../components/Shell';
+import { PROVIDER_TABS } from '../../components/nav';
+import { Icon } from '../../components/Icon';
+import {
+  Button, StatusPill, Avatar, SkeletonList, ErrorState, EmptyState,
+} from '../../components/ui';
+import { useApi } from '../../lib/useApi';
+import { api } from '../../lib/api';
+import { formatRelative, formatDateTime } from '../../lib/format';
+
+interface JobRow {
+  id: string;
+  reference: string;
+  title: string;
+  status: string;
+  scheduledStart: string | null;
+  completedAt: string | null;
+  city: string | null;
+  createdAt: string;
+  client: { id: string; fullName: string; phone: string | null };
+  quoteCount: number;
+  invoiceCount: number;
+}
+
+const PIPELINE: Array<{ value: string; label: string }> = [
+  { value: '', label: 'All' },
+  { value: 'new_lead', label: 'New leads' },
+  { value: 'contacted', label: 'Contacted' },
+  { value: 'quoted', label: 'Quoted' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'completed', label: 'Completed' },
+];
+
+export function JobsScreen() {
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const status = params.get('status') ?? '';
+
+  const jobs = useApi(
+    () => api.get<{ data: JobRow[] }>('/provider/jobs', { status: status || undefined, limit: 30 }),
+    [status],
+  );
+
+  const setStatus = (value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set('status', value);
+    else next.delete('status');
+    setParams(next, { replace: true });
+  };
+
+  return (
+    <Shell
+      title="Jobs"
+      tabs={PROVIDER_TABS}
+      action={
+        <button
+          type="button"
+          className="app-header__action"
+          onClick={() => navigate('/jobs/new')}
+          aria-label="Create a job"
+        >
+          <Icon name="plus" size={22} />
+        </button>
+      }
+    >
+      <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
+        {PIPELINE.map((stage) => (
+          <button
+            key={stage.value || 'all'}
+            type="button"
+            className={`chip${status === stage.value ? ' is-active' : ''}`}
+            onClick={() => setStatus(stage.value)}
+            aria-pressed={status === stage.value}
+          >
+            {stage.label}
+          </button>
+        ))}
+      </div>
+
+      {jobs.loading ? (
+        <SkeletonList rows={5} />
+      ) : jobs.error ? (
+        <ErrorState message={jobs.error} onRetry={jobs.reload} />
+      ) : !jobs.data?.data.length ? (
+        <EmptyState
+          icon="briefcase"
+          title={status ? 'No jobs at this stage' : 'No jobs yet'}
+          body={
+            status
+              ? 'Try another stage in the pipeline above.'
+              : 'New customer requests land here automatically. You can also add a job for a client you already work with.'
+          }
+          action={<Button icon="plus" onClick={() => navigate('/jobs/new')}>Add a job</Button>}
+        />
+      ) : (
+        <div className="stack">
+          {jobs.data.data.map((job) => (
+            <button
+              key={job.id}
+              type="button"
+              className="card-button"
+              onClick={() => navigate(`/jobs/${job.id}`)}
+            >
+              <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+                <span className="tiny subtle tabular">{job.reference}</span>
+                <StatusPill status={job.status} />
+              </div>
+
+              <div className="row" style={{ alignItems: 'flex-start' }}>
+                <Avatar name={job.client.fullName} size="sm" />
+                <div className="grow">
+                  <div className="list-item__title">{job.title}</div>
+                  <div className="list-item__meta truncate">
+                    {job.client.fullName}{job.city ? ` · ${job.city}` : ''}
+                  </div>
+                </div>
+              </div>
+
+              <div className="row row--wrap" style={{ gap: 'var(--s3)', marginTop: 'var(--s3)' }}>
+                {job.scheduledStart && (
+                  <span className="tiny muted row" style={{ gap: 4 }}>
+                    <Icon name="calendar" size={13} /> {formatDateTime(job.scheduledStart)}
+                  </span>
+                )}
+                {job.quoteCount > 0 && (
+                  <span className="tiny muted row" style={{ gap: 4 }}>
+                    <Icon name="file-text" size={13} /> {job.quoteCount}
+                  </span>
+                )}
+                {job.invoiceCount > 0 && (
+                  <span className="tiny muted row" style={{ gap: 4 }}>
+                    <Icon name="receipt" size={13} /> {job.invoiceCount}
+                  </span>
+                )}
+                <span className="tiny subtle" style={{ marginLeft: 'auto' }}>
+                  {formatRelative(job.createdAt)}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </Shell>
+  );
+}

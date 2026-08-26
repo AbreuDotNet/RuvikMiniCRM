@@ -1,0 +1,75 @@
+# Local production-shaped stack: real PostgreSQL, real Redis, API and worker
+# as separate processes so horizontal scaling is exercised the way it runs
+# in production.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ruvik
+      POSTGRES_PASSWORD: ruvik_local_dev
+      POSTGRES_DB: ruvik
+    ports: ['5432:5432']
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ruvik -d ruvik']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgres://ruvik:ruvik_local_dev@postgres:5432/ruvik?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      API_BASE_URL: http://localhost:4000
+      WEB_BASE_URL: http://localhost:5173
+      # Local-only values. In production these come from the secrets manager.
+      JWT_ACCESS_SECRET: local-dev-jwt-secret-value-at-least-32-chars
+      ENCRYPTION_KEY: local-dev-encryption-key-at-least-32-chars
+      HASH_PEPPER: local-dev-hash-pepper-16
+      BILLING_WEBHOOK_SECRET: local-dev-billing-webhook-secret
+      # The API serves requests; the worker drains the queue.
+      WORKER_MODE: external
+    ports: ['4000:4000']
+    volumes: ['storage:/app/storage']
+
+  worker:
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: ['node', 'apps/api/dist/workers/runner.js']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://ruvik:ruvik_local_dev@postgres:5432/ruvik?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      API_BASE_URL: http://localhost:4000
+      WEB_BASE_URL: http://localhost:5173
+      JWT_ACCESS_SECRET: local-dev-jwt-secret-value-at-least-32-chars
+      ENCRYPTION_KEY: local-dev-encryption-key-at-least-32-chars
+      HASH_PEPPER: local-dev-hash-pepper-16
+      BILLING_WEBHOOK_SECRET: local-dev-billing-webhook-secret
+    volumes: ['storage:/app/storage']
+    # Scale the queue independently of the API: docker compose up --scale worker=3
+    deploy:
+      replicas: 1
+
+volumes:
+  pgdata:
+  storage:

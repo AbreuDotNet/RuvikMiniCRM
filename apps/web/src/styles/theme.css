@@ -1,0 +1,239 @@
+/* ==========================================================================
+   Ruvik design system
+   Warm, professional identity for local trade businesses:
+   steel blue for structure and trust, terracotta for action, sage for
+   positive states. Light and dark are both first-class.
+   ========================================================================== */
+
+:root {
+  /* Brand ramps */
+  --slate-900: #16232F;
+  --slate-800: #1F3243;
+  --slate-700: #2C455D;
+  --slate-600: #3C5A7D;
+  --slate-500: #4E6F94;
+  --slate-400: #7794B2;
+  --slate-200: #C3D2E0;
+  --slate-100: #E3EAF1;
+
+  --terracotta-700: #9E4A2E;
+  --terracotta-600: #B5573A;
+  --terracotta-500: #C4623F;
+  --terracotta-400: #D57E5F;
+  --terracotta-100: #F7E5DE;
+
+  --sage-700: #4A6B55;
+  --sage-600: #5E846B;
+  --sage-500: #7A9E86;
+  --sage-100: #E4EDE7;
+
+  --amber-600: #B4771F;
+  --amber-100: #FBEEDA;
+
+  --rose-600: #B3453F;
+  --rose-100: #F9E3E2;
+
+  /* Semantic tokens — light */
+  --bg: #F6F7F9;
+  --bg-elevated: #FFFFFF;
+  --bg-sunken: #EDEFF3;
+  --bg-inset: #F1F4F7;
+  --surface-hover: #F4F6F9;
+
+  --text: #16232F;
+  --text-muted: #5B6B7C;
+  --text-subtle: #8494A4;
+  --text-inverse: #FFFFFF;
+
+  --border: #DFE5EC;
+  --border-strong: #C6D0DA;
+
+  --accent: var(--terracotta-500);
+  --accent-hover: var(--terracotta-600);
+  --accent-soft: var(--terracotta-100);
+  --accent-text: #FFFFFF;
+
+  --brand: var(--slate-600);
+  --brand-hover: var(--slate-700);
+  --brand-soft: #E7EDF4;
+
+  --success: var(--sage-700);
+  --success-soft: var(--sage-100);
+  --warning: var(--amber-600);
+  --warning-soft: var(--amber-100);
+  --danger: var(--rose-600);
+  --danger-soft: var(--rose-100);
+
+  --focus-ring: 0 0 0 3px rgba(60, 90, 125, 0.35);
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(22, 35, 47, 0.06), 0 1px 3px rgba(22, 35, 47, 0.04);
+  --shadow-md: 0 2px 6px rgba(22, 35, 47, 0.07), 0 6px 16px rgba(22, 35, 47, 0.06);
+  --shadow-lg: 0 8px 28px rgba(22, 35, 47, 0.14);
+
+  /* Geometry */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  /* Spacing scale */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px; --s8: 32px; --s10: 40px; --s12: 48px;
+
+  --tab-bar-height: 62px;
+  --header-height: 56px;
+  --content-max: 1180px;
+
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+}
+
+/* Dark theme. Follows the system unless the user has chosen explicitly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0F1721;
+    --bg-elevated: #182534;
+    --bg-sunken: #0A1119;
+    --bg-inset: #1D2C3D;
+    --surface-hover: #1F3043;
+
+    --text: #E9EFF5;
+    --text-muted: #9EB0C2;
+    --text-subtle: #71879C;
+    --text-inverse: #0F1721;
+
+    --border: #24374A;
+    --border-strong: #33495F;
+
+    --accent: #D5765A;
+    --accent-hover: #E08B72;
+    --accent-soft: #3A2219;
+    --accent-text: #17110E;
+
+    --brand: #6E93BB;
+    --brand-hover: #86A6C9;
+    --brand-soft: #1B2C3E;
+
+    --success: #8FB99C;
+    --success-soft: #1C2C22;
+    --warning: #D2A055;
+    --warning-soft: #302516;
+    --danger: #DE7C77;
+    --danger-soft: #331D1C;
+
+    --focus-ring: 0 0 0 3px rgba(133, 168, 204, 0.45);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0F1721;
+  --bg-elevated: #182534;
+  --bg-sunken: #0A1119;
+  --bg-inset: #1D2C3D;
+  --surface-hover: #1F3043;
+
+  --text: #E9EFF5;
+  --text-muted: #9EB0C2;
+  --text-subtle: #71879C;
+  --text-inverse: #0F1721;
+
+  --border: #24374A;
+  --border-strong: #33495F;
+
+  --accent: #D5765A;
+  --accent-hover: #E08B72;
+  --accent-soft: #3A2219;
+  --accent-text: #17110E;
+
+  --brand: #6E93BB;
+  --brand-hover: #86A6C9;
+  --brand-soft: #1B2C3E;
+
+  --success: #8FB99C;
+  --success-soft: #1C2C22;
+  --warning: #D2A055;
+  --warning-soft: #302516;
+  --danger: #DE7C77;
+  --danger-soft: #331D1C;
+
+  --focus-ring: 0 0 0 3px rgba(133, 168, 204, 0.45);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+
+/* -------------------------------------------------------------- reset --- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-size: 15px;
+  line-height: 1.5;
+  overscroll-behavior-y: none;
+}
+
+h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -0.015em; line-height: 1.25; }
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.22rem; }
+h3 { font-size: 1.02rem; }
+p { margin: 0; }
+a { color: var(--brand); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* A visible focus ring is required for WCAG 2.2 (2.4.11 / 2.4.13). */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+::selection { background: var(--accent-soft); color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Screen-reader-only text that stays reachable by keyboard. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--s4);
+  top: -60px;
+  z-index: 100;
+  padding: var(--s3) var(--s4);
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: var(--radius);
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: var(--s4); }

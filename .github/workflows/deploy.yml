@@ -1,0 +1,63 @@
+name: Deploy
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    # Environment protection rules gate production behind a manual approval
+    # and hold the deployment secrets.
+    environment: ${{ inputs.environment || 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # Migrations run before the new image is rolled out, and must be
+      # backwards compatible with the version still serving traffic.
+      - name: Run database migrations
+        run: npm run migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.REGISTRY }}/ruvik-api:${{ github.sha }}
+            ${{ secrets.REGISTRY }}/ruvik-api:latest
+
+      - name: Roll out
+        run: |
+          echo "Rolling out ${{ github.sha }} to ${{ inputs.environment || 'production' }}"
+          # Replace with the platform's deploy command, e.g.
+          #   kubectl set image deployment/ruvik-api api=$REGISTRY/ruvik-api:$GITHUB_SHA
+          #   fly deploy --image $REGISTRY/ruvik-api:$GITHUB_SHA
+
+      - name: Smoke test
+        run: |
+          npx wait-on ${{ secrets.API_BASE_URL }}/health -t 120000
+          curl -fsS ${{ secrets.API_BASE_URL }}/ready | tee /dev/stderr | grep -q '"status":"ready"'

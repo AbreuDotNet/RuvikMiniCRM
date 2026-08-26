@@ -1,0 +1,10 @@
+# ZAP baseline rule tuning.
+# Format: <rule id>	<WARN|IGNORE|FAIL>	<justification>
+10015	IGNORE	Cache-Control on API responses is set per-route; JSON is not cached by design.
+10027	IGNORE	Informational: suspicious comments in the seeded demo dataset.
+10098	IGNORE	Cross-domain misconfiguration N/A: CORS is an explicit allow-list.
+10063	FAIL	Permissions policy must be present on responses.
+40012	FAIL	Reflected XSS must never appear.
+40014	FAIL	Persistent XSS must never appear.
+40018	FAIL	SQL injection must never appear.
+90022	FAIL	Application error disclosure must never appear.
