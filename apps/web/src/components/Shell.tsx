@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 import { useToast } from '../state/ui';
@@ -19,8 +19,20 @@ interface ShellProps {
   flush?: boolean;
 }
 
+/**
+ * Names the browser tab and history entry after the current screen. Without
+ * it every route shares the index title, so history and tab strips are
+ * unreadable and a screen reader announces nothing on navigation.
+ */
+export function useDocumentTitle(title: string) {
+  useEffect(() => {
+    document.title = `${title} · Ruvik`;
+  }, [title]);
+}
+
 export function Shell({ title, tabs, children, back, action, flush }: ShellProps) {
   const navigate = useNavigate();
+  useDocumentTitle(title);
 
   return (
     <div className="app-shell app-shell--railed">
@@ -50,7 +62,9 @@ export function Shell({ title, tabs, children, back, action, flush }: ShellProps
           </div>
         </header>
 
-        <main className={flush ? 'app-main app-main--flush' : 'app-main'} id="main">
+        {/* tabIndex lets RouteFocus move focus here after a navigation; the
+            router swaps the DOM without the browser resetting focus itself. */}
+        <main className={flush ? 'app-main app-main--flush' : 'app-main'} id="main" tabIndex={-1}>
           {children}
         </main>
       </div>

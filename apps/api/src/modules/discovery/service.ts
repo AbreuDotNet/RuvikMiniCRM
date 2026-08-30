@@ -1,6 +1,9 @@
 import { getDb } from '../../db/index.js';
 import { notFound } from '../../lib/errors.js';
-import { decodeCursor, buildPage, type Page } from '../../lib/pagination.js';
+import {
+  buildKeysetPage, decodeKeyset, keysetOrderBy, keysetWhere,
+  type Page, type SortColumn,
+} from '../../lib/pagination.js';
 import { signStorageUrl } from '../../lib/storage.js';
 
 export interface SearchFilters {
@@ -19,6 +22,8 @@ export interface SearchFilters {
 export interface ServiceSearchRow {
   id: string;
   created_at: string;
+  /** ts_rank of the row, present only when the caller passed a text query. */
+  rank?: string | null;
   title: string;
   short_description: string | null;
   pricing_type: string;
@@ -61,8 +66,10 @@ export async function searchServices(filters: SearchFilters): Promise<Page<Servi
     return `$${params.length}`;
   };
 
+  let rankParam: string | null = null;
   if (filters.q) {
     const p = push(filters.q);
+    rankParam = p;
     where.push(`(s.search_doc @@ plainto_tsquery('simple', ${p})
                  OR p.search_doc @@ plainto_tsquery('simple', ${p})
                  OR c.name ILIKE '%' || ${p} || '%')`);
@@ -78,18 +85,54 @@ export async function searchServices(filters: SearchFilters): Promise<Page<Servi
   }
   if (filters.verifiedOnly) where.push(`p.verification_status = 'verified'`);
 
-  // Keyset pagination: strictly ordered by (created_at, id) for stable pages.
-  if (filters.cursor) {
-    const cur = decodeCursor(filters.cursor);
-    where.push(`(s.created_at, s.id) < (${push(cur.createdAt)}::timestamptz, ${push(cur.id)}::uuid)`);
+  // Every sort ends with (created_at, id) so the ordering is total and the
+  // keyset below can never straddle two rows that compare equal.
+  const TIEBREAK: SortColumn[] = [
+    { sql: 's.created_at', direction: 'DESC', nulls: 'LAST', type: 'timestamptz' },
+    { sql: 's.id', direction: 'DESC', nulls: 'LAST', type: 'uuid' },
+  ];
+
+  // ts_rank is selected as well as ordered by, so the cursor can carry the
+  // exact value the row was ranked with rather than recomputing it.
+  //
+  // The ::float8 is load-bearing. ts_rank returns float4, and Postgres prints
+  // a float4 as the shortest text that round-trips *as a float4* — read back
+  // into a JS double that text is a near-but-unequal number, so the cursor's
+  // equality test missed every row it tied with and pages dropped rows.
+  // Widening to float8 first makes the printed value round-trip exactly.
+  const rankSql = rankParam
+    ? `ts_rank(s.search_doc, plainto_tsquery('simple', ${rankParam}))::float8`
+    : null;
+
+  let sortColumns: SortColumn[];
+  if (filters.sort === 'rating') {
+    sortColumns = [
+      { sql: 'p.rating_avg', direction: 'DESC', nulls: 'LAST', type: 'numeric' },
+      { sql: 'p.rating_count', direction: 'DESC', nulls: 'LAST', type: 'int' },
+      ...TIEBREAK,
+    ];
+  } else if (filters.sort === 'price_asc' || filters.sort === 'price_desc') {
+    sortColumns = [
+      {
+        sql: 's.price_cents',
+        direction: filters.sort === 'price_asc' ? 'ASC' : 'DESC',
+        nulls: 'LAST',
+        type: 'int',
+      },
+      ...TIEBREAK,
+    ];
+  } else if (filters.sort === 'relevance' && rankSql) {
+    sortColumns = [
+      { sql: rankSql, direction: 'DESC', nulls: 'LAST', type: 'float8' },
+      { sql: 'p.rating_avg', direction: 'DESC', nulls: 'LAST', type: 'numeric' },
+      ...TIEBREAK,
+    ];
+  } else {
+    sortColumns = TIEBREAK;
   }
 
-  let orderBy = 's.created_at DESC, s.id DESC';
-  if (filters.sort === 'rating') orderBy = 'p.rating_avg DESC, p.rating_count DESC, s.created_at DESC, s.id DESC';
-  else if (filters.sort === 'price_asc') orderBy = 's.price_cents ASC NULLS LAST, s.created_at DESC, s.id DESC';
-  else if (filters.sort === 'price_desc') orderBy = 's.price_cents DESC NULLS LAST, s.created_at DESC, s.id DESC';
-  else if (filters.sort === 'relevance' && filters.q) {
-    orderBy = `ts_rank(s.search_doc, plainto_tsquery('simple', $1)) DESC, p.rating_avg DESC, s.created_at DESC, s.id DESC`;
+  if (filters.cursor) {
+    where.push(keysetWhere(sortColumns, decodeKeyset(filters.cursor, sortColumns), push));
   }
 
   const limitParam = push(filters.limit + 1);
@@ -100,16 +143,35 @@ export async function searchServices(filters: SearchFilters): Promise<Page<Servi
            c.slug AS category_slug, c.name AS category_name,
            p.id AS provider_id, p.slug AS provider_slug, p.business_name, p.city,
            p.rating_avg, p.rating_count, p.verification_status
+           ${rankSql ? `, ${rankSql} AS rank` : ''}
       FROM services s
       JOIN providers p  ON p.id = s.provider_id
       JOIN users u      ON u.id = p.user_id
       JOIN categories c ON c.id = s.category_id
      WHERE ${where.join(' AND ')}
-     ORDER BY ${orderBy}
+     ORDER BY ${keysetOrderBy(sortColumns)}
      LIMIT ${limitParam}`;
 
   const { rows } = await db.query<ServiceSearchRow>(sql, params);
-  return buildPage(rows, filters.limit);
+
+  // Reads the same tuple the ORDER BY used, in the same order.
+  const asText = (value: unknown): string | null =>
+    value === null || value === undefined
+      ? null
+      : value instanceof Date
+        ? value.toISOString()
+        : String(value);
+
+  return buildKeysetPage(rows, filters.limit, (row) =>
+    sortColumns.map((col) => {
+      if (col.sql === 's.created_at') return asText(row.created_at);
+      if (col.sql === 's.id') return asText(row.id);
+      if (col.sql === 'p.rating_avg') return asText(row.rating_avg);
+      if (col.sql === 'p.rating_count') return asText(row.rating_count);
+      if (col.sql === 's.price_cents') return asText(row.price_cents);
+      return asText(row.rank);
+    }),
+  );
 }
 
 /** Public provider profile: business details, active services, recent reviews. */

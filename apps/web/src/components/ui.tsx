@@ -356,6 +356,44 @@ export function Banner({
   );
 }
 
+/* --------------------------------------------------------- load more --- */
+
+interface LoadMoreProps {
+  hasMore: boolean;
+  loading: boolean;
+  error: string | null;
+  onLoadMore: () => void;
+  /** Suppresses the end-of-list note when only one page was ever fetched. */
+  count: number;
+  pageSize: number;
+}
+
+/**
+ * End-of-list control for a cursor-paginated screen. A failed page reports in
+ * place and keeps the rows already loaded, so a flaky network costs the user
+ * a retry rather than their whole scroll position.
+ */
+export function LoadMore({ hasMore, loading, error, onLoadMore, count, pageSize }: LoadMoreProps) {
+  if (!hasMore) {
+    return count > pageSize
+      ? <p className="tiny subtle center load-more">That's everything.</p>
+      : null;
+  }
+  return (
+    <div className="load-more">
+      {error && <p className="tiny" style={{ color: 'var(--danger)' }} role="alert">{error}</p>}
+      <Button variant="secondary" onClick={onLoadMore} loading={loading} block>
+        {error ? 'Try again' : 'Load more'}
+      </Button>
+    </div>
+  );
+}
+
+/** Slim indeterminate bar for a list being refetched under the user. */
+export function RefreshBar({ active }: { active: boolean }) {
+  return active ? <div className="refresh-bar" aria-hidden="true" /> : null;
+}
+
 /* ------------------------------------------------------------- section --- */
 
 export function Section({

@@ -15,8 +15,8 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--brand);
-  color: #fff;
+  background: var(--brand-surface);
+  color: var(--brand-surface-text);
   padding-top: env(safe-area-inset-top);
   box-shadow: var(--shadow-sm);
 }
@@ -52,7 +52,7 @@
   min-height: 40px;
   border: none;
   background: transparent;
-  color: #fff;
+  color: var(--brand-surface-text);
   border-radius: var(--radius);
   cursor: pointer;
   position: relative;
@@ -66,13 +66,13 @@
   min-width: 17px; height: 17px;
   padding: 0 4px;
   border-radius: var(--radius-pill);
-  background: var(--terracotta-500);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-text);
   font-size: 10px;
   font-weight: 700;
   display: grid;
   place-items: center;
-  border: 2px solid var(--brand);
+  border: 2px solid var(--brand-surface-text);
 }
 
 .app-main {
@@ -232,8 +232,8 @@
 .btn--primary { background: var(--accent); color: var(--accent-text); }
 .btn--primary:hover:not(:disabled) { background: var(--accent-hover); }
 
-.btn--brand { background: var(--brand); color: #fff; }
-.btn--brand:hover:not(:disabled) { background: var(--brand-hover); }
+.btn--brand { background: var(--brand-surface); color: var(--brand-surface-text); }
+.btn--brand:hover:not(:disabled) { background: var(--brand-surface-hover); }
 
 .btn--secondary {
   background: var(--bg-elevated);
@@ -245,8 +245,8 @@
 .btn--ghost { background: transparent; color: var(--brand); }
 .btn--ghost:hover:not(:disabled) { background: var(--brand-soft); }
 
-.btn--danger { background: var(--danger); color: #fff; }
-.btn--danger:hover:not(:disabled) { opacity: 0.9; }
+.btn--danger { background: var(--danger-surface); color: var(--danger-surface-text); }
+.btn--danger:hover:not(:disabled) { background: var(--danger-surface-hover); }
 
 .btn--whatsapp { background: #25D366; color: #06301A; }
 .btn--whatsapp:hover:not(:disabled) { background: #1FBF5B; }
@@ -291,15 +291,19 @@
   appearance: none;
 }
 .input::placeholder, .textarea::placeholder { color: var(--text-subtle); }
-.input:hover, .select:hover, .textarea:hover { border-color: var(--slate-400); }
+.input:hover, .select:hover, .textarea:hover { border-color: var(--brand); }
 .input[aria-invalid='true'], .textarea[aria-invalid='true'] { border-color: var(--danger); }
 
 .textarea { min-height: 108px; resize: vertical; line-height: 1.55; }
 
 .select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237A8A9A' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  /* Chevron drawn with currentColor so it follows the theme; the old inline
+     SVG had a hard-coded light grey that vanished on a dark surface. */
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 22px center, right var(--s4) center;
+  background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
-  background-position: right var(--s4) center;
   padding-right: var(--s10);
 }
 
@@ -380,9 +384,9 @@
 }
 .chip:hover { background: var(--surface-hover); }
 .chip.is-active {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: #fff;
+  background: var(--brand-surface);
+  border-color: var(--brand-surface);
+  color: var(--brand-surface-text);
 }
 
 /* ------------------------------------------------------- category tiles --- */
@@ -498,9 +502,9 @@
 .stat-tile__value { font-size: 1.85rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
 .stat-tile__label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
 
-.stat-tile--brand { background: var(--brand); border-color: var(--brand); color: #fff; }
+.stat-tile--brand { background: var(--brand-surface); border-color: var(--brand-surface); color: var(--brand-surface-text); }
 .stat-tile--brand .stat-tile__label { color: rgba(255, 255, 255, 0.85); }
-.stat-tile--sage { background: var(--sage-600); border-color: var(--sage-600); color: #fff; }
+.stat-tile--sage { background: var(--success-surface); border-color: var(--success-surface); color: var(--success-surface-text); }
 .stat-tile--sage .stat-tile__label { color: rgba(255, 255, 255, 0.88); }
 .stat-tile--accent .stat-tile__value { color: var(--accent); }
 
@@ -586,7 +590,9 @@
 
 /* --------------------------------------------------------------- stars --- */
 
-.stars { display: inline-flex; align-items: center; gap: 1px; color: var(--terracotta-500); }
+.verified-mark { color: var(--success); flex-shrink: 0; }
+
+.stars { display: inline-flex; align-items: center; gap: 1px; color: var(--accent); }
 .stars__count { margin-left: var(--s2); font-size: 0.82rem; color: var(--text-muted); font-weight: 600; }
 
 /* --------------------------------------------------------- empty state --- */
@@ -734,8 +740,8 @@
 }
 
 .doc-sheet__header {
-  background: var(--brand);
-  color: #fff;
+  background: var(--brand-surface);
+  color: var(--brand-surface-text);
   padding: var(--s5) var(--s4);
 }
 .doc-sheet__kind {
@@ -971,8 +977,8 @@
   cursor: pointer;
 }
 .segmented__option.is-active {
-  background: var(--brand);
-  color: #fff;
+  background: var(--brand-surface);
+  color: var(--brand-surface-text);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1025,6 +1031,43 @@
   margin-top: var(--s3);
   padding-top: var(--s3);
   border-top: 1px solid var(--border);
+}
+
+/* Shown while a newer page is in flight over results already on screen. Taken
+   out of flow on purpose: in the layout it would push the whole list down by
+   its height plus the stack gap on every keystroke — the exact jump the
+   stale-while-revalidate behaviour exists to avoid. */
+.results-stack { position: relative; }
+
+.refresh-bar {
+  position: absolute;
+  top: -9px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+.refresh-bar::after {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 38%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: refresh-slide 1.1s ease-in-out infinite;
+}
+@keyframes refresh-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(360%); }
+}
+
+.load-more {
+  margin-top: var(--s2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
 }
 
 .price-tag {

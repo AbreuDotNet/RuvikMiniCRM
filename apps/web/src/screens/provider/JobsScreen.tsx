@@ -3,9 +3,9 @@ import { Shell } from '../../components/Shell';
 import { PROVIDER_TABS } from '../../components/nav';
 import { Icon } from '../../components/Icon';
 import {
-  Button, StatusPill, Avatar, SkeletonList, ErrorState, EmptyState,
+  Button, StatusPill, Avatar, SkeletonList, ErrorState, EmptyState, LoadMore, RefreshBar,
 } from '../../components/ui';
-import { useApi } from '../../lib/useApi';
+import { usePagedApi } from '../../lib/useApi';
 import { api } from '../../lib/api';
 import { formatRelative, formatDateTime } from '../../lib/format';
 
@@ -34,13 +34,17 @@ const PIPELINE: Array<{ value: string; label: string }> = [
   { value: 'completed', label: 'Completed' },
 ];
 
+const PAGE_SIZE = 30;
+
 export function JobsScreen() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const status = params.get('status') ?? '';
 
-  const jobs = useApi(
-    () => api.get<{ data: JobRow[] }>('/provider/jobs', { status: status || undefined, limit: 30 }),
+  const jobs = usePagedApi<JobRow>(
+    (cursor) => api.get('/provider/jobs', {
+      status: status || undefined, cursor: cursor ?? undefined, limit: PAGE_SIZE,
+    }),
     [status],
   );
 
@@ -84,7 +88,7 @@ export function JobsScreen() {
         <SkeletonList rows={5} />
       ) : jobs.error ? (
         <ErrorState message={jobs.error} onRetry={jobs.reload} />
-      ) : !jobs.data?.data.length ? (
+      ) : !jobs.items.length ? (
         <EmptyState
           icon="briefcase"
           title={status ? 'No jobs at this stage' : 'No jobs yet'}
@@ -96,8 +100,9 @@ export function JobsScreen() {
           action={<Button icon="plus" onClick={() => navigate('/jobs/new')}>Add a job</Button>}
         />
       ) : (
-        <div className="stack">
-          {jobs.data.data.map((job) => (
+        <div className="stack results-stack" aria-busy={jobs.refreshing}>
+          <RefreshBar active={jobs.refreshing} />
+          {jobs.items.map((job) => (
             <button
               key={job.id}
               type="button"
@@ -141,6 +146,15 @@ export function JobsScreen() {
               </div>
             </button>
           ))}
+
+          <LoadMore
+            hasMore={jobs.hasMore}
+            loading={jobs.loadingMore}
+            error={jobs.moreError}
+            onLoadMore={jobs.loadMore}
+            count={jobs.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
     </Shell>

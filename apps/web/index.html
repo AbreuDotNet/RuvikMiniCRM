@@ -3,11 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#3C5A7D" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0F1721" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="Ruvik — find trusted local service professionals, or run your trade business from your phone." />
+    <meta name="theme-color" content="#3C5A7D" />
     <title>Ruvik — Your local service marketplace</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233C5A7D'/%3E%3Cpath d='M11 9l5 5-2 2-5-5a3 3 0 012-2z' fill='%23fff'/%3E%3Cpath d='M21 9a4 4 0 00-5 5l-6 6 2 2 6-6a4 4 0 005-5l-2 2-2-2 2-2z' fill='%23C4623F'/%3E%3C/svg%3E" />
+    <script>
+      /*
+       * Applies the saved theme before the first paint. React sets the same
+       * attribute, but it does so in an effect — i.e. after paint — which made
+       * a dark-mode user see a white flash on every load. Keep the storage key
+       * and the theme-color values in sync with src/state/ui.tsx.
+       */
+      (function () {
+        try {
+          var saved = localStorage.getItem('ruvik.theme');
+          if (saved === 'light' || saved === 'dark') {
+            document.documentElement.setAttribute('data-theme', saved);
+          }
+        } catch (e) {
+          /* Private browsing can throw on access; the system default is fine. */
+        }
+        var dark =
+          document.documentElement.getAttribute('data-theme') === 'dark' ||
+          (!document.documentElement.hasAttribute('data-theme') &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document
+          .querySelector('meta[name="theme-color"]')
+          .setAttribute('content', dark ? '#243B51' : '#3C5A7D');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

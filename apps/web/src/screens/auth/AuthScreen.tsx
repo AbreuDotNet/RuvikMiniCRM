@@ -5,7 +5,7 @@ import { useToast } from '../../state/ui';
 import { ApiError } from '../../lib/api';
 import { Button, TextField, SelectField } from '../../components/ui';
 import { Icon } from '../../components/Icon';
-import { ToastRegion } from '../../components/Shell';
+import { ToastRegion, useDocumentTitle } from '../../components/Shell';
 
 type Mode = 'signin' | 'signup';
 
@@ -17,6 +17,7 @@ const DEMO_ACCOUNTS = [
 ];
 
 export function AuthScreen() {
+  useDocumentTitle('Sign in');
   const [mode, setMode] = useState<Mode>('signin');
   const [mfaToken, setMfaToken] = useState<string | null>(null);
 

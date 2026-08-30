@@ -4,12 +4,12 @@ import { Shell } from '../../components/Shell';
 import { CUSTOMER_TABS } from '../../components/nav';
 import { Icon } from '../../components/Icon';
 import {
-  Button, Pill, SkeletonList, ErrorState, EmptyState,
+  Button, Pill, SkeletonList, ErrorState, EmptyState, LoadMore, RefreshBar,
 } from '../../components/ui';
-import { useApi } from '../../lib/useApi';
+import { usePagedApi } from '../../lib/useApi';
 import { api } from '../../lib/api';
 import { formatRelative, statusLabel, statusTone } from '../../lib/format';
-import type { CustomerRequest, Paginated } from './types';
+import type { CustomerRequest } from './types';
 
 const FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All' },
@@ -19,13 +19,15 @@ const FILTERS: Array<{ value: string; label: string }> = [
   { value: 'completed', label: 'Completed' },
 ];
 
+const PAGE_SIZE = 30;
+
 export function RequestsScreen() {
   const navigate = useNavigate();
   const [status, setStatus] = useState('');
 
-  const requests = useApi(
-    () => api.get<Paginated<CustomerRequest>>('/customer/requests', {
-      status: status || undefined, limit: 30,
+  const requests = usePagedApi<CustomerRequest>(
+    (cursor) => api.get('/customer/requests', {
+      status: status || undefined, cursor: cursor ?? undefined, limit: PAGE_SIZE,
     }),
     [status],
   );
@@ -50,7 +52,7 @@ export function RequestsScreen() {
         <SkeletonList rows={4} />
       ) : requests.error ? (
         <ErrorState message={requests.error} onRetry={requests.reload} />
-      ) : !requests.data?.data.length ? (
+      ) : !requests.items.length ? (
         <EmptyState
           icon="clipboard"
           title={status ? 'Nothing here yet' : 'No requests yet'}
@@ -66,8 +68,9 @@ export function RequestsScreen() {
           }
         />
       ) : (
-        <div className="stack">
-          {requests.data.data.map((request) => (
+        <div className="stack results-stack" aria-busy={requests.refreshing}>
+          <RefreshBar active={requests.refreshing} />
+          {requests.items.map((request) => (
             <button
               key={request.id}
               type="button"
@@ -105,6 +108,15 @@ export function RequestsScreen() {
               )}
             </button>
           ))}
+
+          <LoadMore
+            hasMore={requests.hasMore}
+            loading={requests.loadingMore}
+            error={requests.moreError}
+            onLoadMore={requests.loadMore}
+            count={requests.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
     </Shell>

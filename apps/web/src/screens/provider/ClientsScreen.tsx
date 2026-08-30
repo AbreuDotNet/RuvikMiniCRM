@@ -5,9 +5,9 @@ import { PROVIDER_TABS } from '../../components/nav';
 import { Icon } from '../../components/Icon';
 import {
   Button, Avatar, Pill, StatusPill, SkeletonList, ErrorState, EmptyState,
-  Modal, TextField,
+  Modal, TextField, LoadMore, RefreshBar,
 } from '../../components/ui';
-import { useApi, useDebounced } from '../../lib/useApi';
+import { useApi, usePagedApi, useDebounced } from '../../lib/useApi';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../state/ui';
 import { formatDate, formatRelative } from '../../lib/format';
@@ -24,14 +24,18 @@ interface ClientRow {
   createdAt: string;
 }
 
+const PAGE_SIZE = 40;
+
 export function ClientsScreen() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const debounced = useDebounced(query, 300);
 
-  const clients = useApi(
-    () => api.get<{ data: ClientRow[] }>('/provider/clients', { q: debounced || undefined, limit: 40 }),
+  const clients = usePagedApi<ClientRow>(
+    (cursor) => api.get('/provider/clients', {
+      q: debounced || undefined, cursor: cursor ?? undefined, limit: PAGE_SIZE,
+    }),
     [debounced],
   );
 
@@ -66,7 +70,7 @@ export function ClientsScreen() {
         <SkeletonList rows={5} />
       ) : clients.error ? (
         <ErrorState message={clients.error} onRetry={clients.reload} />
-      ) : !clients.data?.data.length ? (
+      ) : !clients.items.length ? (
         <EmptyState
           icon="users"
           title={query ? 'No clients match that search' : 'No clients yet'}
@@ -78,8 +82,10 @@ export function ClientsScreen() {
           action={<Button icon="plus" onClick={() => setAddOpen(true)}>Add a client</Button>}
         />
       ) : (
-        <div className="list-group">
-          {clients.data.data.map((client) => (
+        <div className="results-stack" aria-busy={clients.refreshing}>
+          <RefreshBar active={clients.refreshing} />
+          <div className="list-group">
+          {clients.items.map((client) => (
             <button
               key={client.id}
               type="button"
@@ -104,6 +110,16 @@ export function ClientsScreen() {
               </div>
             </button>
           ))}
+          </div>
+
+          <LoadMore
+            hasMore={clients.hasMore}
+            loading={clients.loadingMore}
+            error={clients.moreError}
+            onLoadMore={clients.loadMore}
+            count={clients.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
 

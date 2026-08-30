@@ -4,12 +4,15 @@ import { ADMIN_TABS } from '../../components/nav';
 import { Icon } from '../../components/Icon';
 import {
   Button, Pill, StatusPill, Avatar, Stars, SkeletonList, ErrorState, EmptyState,
-  Modal, TextArea, Banner, Section,
+  Modal, TextArea, Banner, Section, LoadMore, RefreshBar,
 } from '../../components/ui';
-import { useApi, useDebounced } from '../../lib/useApi';
+import { useApi, usePagedApi, useDebounced } from '../../lib/useApi';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../state/ui';
 import { formatMoneyCompact, formatDate, formatRelative } from '../../lib/format';
+
+/** Every admin list pages at the same size. */
+const PAGE_SIZE = 40;
 
 /* ============================== metrics ================================== */
 
@@ -173,9 +176,9 @@ export function AdminProvidersScreen() {
   const [filter, setFilter] = useState('');
   const [reviewing, setReviewing] = useState<AdminProvider | null>(null);
 
-  const providers = useApi(
-    () => api.get<{ data: AdminProvider[] }>('/admin/providers', {
-      verificationStatus: filter || undefined, limit: 40,
+  const providers = usePagedApi<AdminProvider>(
+    (cursor) => api.get('/admin/providers', {
+      verificationStatus: filter || undefined, cursor: cursor ?? undefined, limit: PAGE_SIZE,
     }),
     [filter],
   );
@@ -200,11 +203,12 @@ export function AdminProvidersScreen() {
         <SkeletonList rows={5} />
       ) : providers.error ? (
         <ErrorState message={providers.error} onRetry={providers.reload} />
-      ) : !providers.data?.data.length ? (
+      ) : !providers.items.length ? (
         <EmptyState icon="briefcase" title="No providers here" body="Try another filter." />
       ) : (
-        <div className="stack">
-          {providers.data.data.map((provider) => (
+        <div className="stack results-stack" aria-busy={providers.refreshing}>
+          <RefreshBar active={providers.refreshing} />
+          {providers.items.map((provider) => (
             <button
               key={provider.id}
               type="button"
@@ -235,6 +239,15 @@ export function AdminProvidersScreen() {
               </div>
             </button>
           ))}
+
+          <LoadMore
+            hasMore={providers.hasMore}
+            loading={providers.loadingMore}
+            error={providers.moreError}
+            onLoadMore={providers.loadMore}
+            count={providers.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
 
@@ -370,9 +383,10 @@ export function AdminUsersScreen() {
   const [target, setTarget] = useState<AdminUser | null>(null);
   const debounced = useDebounced(query, 300);
 
-  const users = useApi(
-    () => api.get<{ data: AdminUser[] }>('/admin/users', {
-      q: debounced || undefined, role: role || undefined, limit: 40,
+  const users = usePagedApi<AdminUser>(
+    (cursor) => api.get('/admin/users', {
+      q: debounced || undefined, role: role || undefined,
+      cursor: cursor ?? undefined, limit: PAGE_SIZE,
     }),
     [debounced, role],
   );
@@ -414,11 +428,13 @@ export function AdminUsersScreen() {
         <SkeletonList rows={5} />
       ) : users.error ? (
         <ErrorState message={users.error} onRetry={users.reload} />
-      ) : !users.data?.data.length ? (
+      ) : !users.items.length ? (
         <EmptyState icon="users" title="No users found" body="Try a different search or filter." />
       ) : (
-        <div className="list-group">
-          {users.data.data.map((user) => (
+        <div className="results-stack" aria-busy={users.refreshing}>
+          <RefreshBar active={users.refreshing} />
+          <div className="list-group">
+          {users.items.map((user) => (
             <button
               key={user.id}
               type="button"
@@ -441,6 +457,16 @@ export function AdminUsersScreen() {
               </div>
             </button>
           ))}
+          </div>
+
+          <LoadMore
+            hasMore={users.hasMore}
+            loading={users.loadingMore}
+            error={users.moreError}
+            onLoadMore={users.loadMore}
+            count={users.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
 
@@ -543,9 +569,9 @@ export function AdminReviewsScreen() {
   const [target, setTarget] = useState<AdminReview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const reviews = useApi(
-    () => api.get<{ data: AdminReview[] }>('/admin/reviews', {
-      status: filter || undefined, limit: 40,
+  const reviews = usePagedApi<AdminReview>(
+    (cursor) => api.get('/admin/reviews', {
+      status: filter || undefined, cursor: cursor ?? undefined, limit: PAGE_SIZE,
     }),
     [filter],
   );
@@ -590,11 +616,12 @@ export function AdminReviewsScreen() {
         <SkeletonList rows={4} />
       ) : reviews.error ? (
         <ErrorState message={reviews.error} onRetry={reviews.reload} />
-      ) : !reviews.data?.data.length ? (
+      ) : !reviews.items.length ? (
         <EmptyState icon="star" title="No reviews here" body="Try another filter." />
       ) : (
-        <div className="stack">
-          {reviews.data.data.map((review) => (
+        <div className="stack results-stack" aria-busy={reviews.refreshing}>
+          <RefreshBar active={reviews.refreshing} />
+          {reviews.items.map((review) => (
             <button
               key={review.id}
               type="button"
@@ -615,6 +642,15 @@ export function AdminReviewsScreen() {
               </div>
             </button>
           ))}
+
+          <LoadMore
+            hasMore={reviews.hasMore}
+            loading={reviews.loadingMore}
+            error={reviews.moreError}
+            onLoadMore={reviews.loadMore}
+            count={reviews.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
 
@@ -701,7 +737,24 @@ export function AdminAuditScreen() {
   const [checking, setChecking] = useState(false);
   const { notify } = useToast();
 
-  const logs = useApi(() => api.get<{ data: AuditEntry[] }>('/admin/audit-logs', { limit: 60 }), []);
+  // Audit rows are keyed on a bigserial id, not (created_at, id) like every
+  // other list, so this adapts its before/nextBefore shape to the shared one.
+  const logs = usePagedApi<AuditEntry>(
+    async (cursor) => {
+      const page = await api.get<{
+        data: AuditEntry[]; nextBefore: number | null; hasMore: boolean;
+      }>('/admin/audit-logs', { before: cursor ?? undefined, limit: PAGE_SIZE });
+      return {
+        data: page.data,
+        pagination: {
+          nextCursor: page.nextBefore === null ? null : String(page.nextBefore),
+          hasMore: page.hasMore,
+          limit: PAGE_SIZE,
+        },
+      };
+    },
+    [],
+  );
 
   const verify = async () => {
     setChecking(true);
@@ -749,11 +802,13 @@ export function AdminAuditScreen() {
         <SkeletonList rows={6} />
       ) : logs.error ? (
         <ErrorState message={logs.error} onRetry={logs.reload} />
-      ) : !logs.data?.data.length ? (
+      ) : !logs.items.length ? (
         <EmptyState icon="shield" title="No audit entries" body="Sensitive actions are recorded here." />
       ) : (
-        <div className="list-group">
-          {logs.data.data.map((entry) => (
+        <div className="results-stack" aria-busy={logs.refreshing}>
+          <RefreshBar active={logs.refreshing} />
+          <div className="list-group">
+          {logs.items.map((entry) => (
             <div key={entry.id} className="list-item" style={{ cursor: 'default', alignItems: 'flex-start' }}>
               <div
                 className="avatar avatar--sm"
@@ -778,6 +833,16 @@ export function AdminAuditScreen() {
               <span className="tiny subtle tabular">#{entry.id}</span>
             </div>
           ))}
+          </div>
+
+          <LoadMore
+            hasMore={logs.hasMore}
+            loading={logs.loadingMore}
+            error={logs.moreError}
+            onLoadMore={logs.loadMore}
+            count={logs.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
     </Shell>

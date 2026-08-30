@@ -5,12 +5,15 @@ import { CUSTOMER_TABS } from '../../components/nav';
 import { Icon, categoryIcon } from '../../components/Icon';
 import {
   Button, Stars, Pill, SkeletonList, ErrorState, EmptyState, Modal, SelectField,
+  LoadMore, RefreshBar,
 } from '../../components/ui';
-import { useApi, useDebounced } from '../../lib/useApi';
+import { useApi, usePagedApi, useDebounced } from '../../lib/useApi';
 import { api } from '../../lib/api';
 import { formatMoney, formatDuration } from '../../lib/format';
-import type { Category, ServiceCard, Paginated } from './types';
+import type { Category, ServiceCard } from './types';
 import { priceLabel } from './types';
+
+const PAGE_SIZE = 20;
 
 export function SearchScreen() {
   const navigate = useNavigate();
@@ -34,14 +37,15 @@ export function SearchScreen() {
 
   const categories = useApi(() => api.get<{ data: Category[] }>('/categories'), []);
 
-  const results = useApi(
-    () => api.get<Paginated<ServiceCard>>('/search/services', {
+  const results = usePagedApi<ServiceCard>(
+    (cursor) => api.get('/search/services', {
       q: debouncedQuery || undefined,
       category: category || undefined,
       minRating: minRating || undefined,
       pricingType: pricingType || undefined,
       sort,
-      limit: 20,
+      cursor: cursor ?? undefined,
+      limit: PAGE_SIZE,
     }),
     [debouncedQuery, category, minRating, pricingType, sort],
   );
@@ -102,9 +106,11 @@ export function SearchScreen() {
 
       <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
         <span className="tiny subtle" aria-live="polite">
-          {results.loading
+          {results.loading || results.refreshing
             ? 'Searching…'
-            : `${results.data?.data.length ?? 0} result${results.data?.data.length === 1 ? '' : 's'}`}
+            : results.hasMore
+              ? `Showing ${results.items.length}`
+              : `${results.items.length} result${results.items.length === 1 ? '' : 's'}`}
         </span>
         <select
           className="select"
@@ -125,7 +131,7 @@ export function SearchScreen() {
         <SkeletonList rows={5} />
       ) : results.error ? (
         <ErrorState message={results.error} onRetry={results.reload} />
-      ) : !results.data?.data.length ? (
+      ) : !results.items.length ? (
         <EmptyState
           icon="search"
           title="No services match that search"
@@ -139,8 +145,14 @@ export function SearchScreen() {
           }
         />
       ) : (
-        <div className="stack">
-          {results.data.data.map((service) => (
+        /* Results stay on screen while a new query is in flight — replacing
+           them with skeletons on every keystroke made the list flicker and
+           lose the user's place. Staleness is signalled by a progress bar
+           rather than by dimming, which would push the cards below the
+           contrast floor the palette was tuned to. */
+        <div className="stack results-stack" aria-busy={results.refreshing}>
+          <RefreshBar active={results.refreshing} />
+          {results.items.map((service) => (
             <button
               key={service.id}
               type="button"
@@ -182,6 +194,15 @@ export function SearchScreen() {
               </div>
             </button>
           ))}
+
+          <LoadMore
+            hasMore={results.hasMore}
+            loading={results.loadingMore}
+            error={results.moreError}
+            onLoadMore={results.loadMore}
+            count={results.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
 

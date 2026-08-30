@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { AuthProvider, useAuth, type Role } from './state/auth';
 import { ToastProvider, ThemeProvider } from './state/ui';
 import { Spinner } from './components/ui';
@@ -89,6 +89,37 @@ function SignInRoute() {
   return <AuthScreen />;
 }
 
+/**
+ * A client-side navigation replaces the page without any of the things a real
+ * one does: focus stays wherever it was, the scroll position carries over, and
+ * assistive tech is told nothing. This restores all three.
+ *
+ * Rendered after the routes so the new screen's Shell has already set the
+ * title by the time this effect reads it.
+ */
+function RouteFocus() {
+  const { pathname } = useLocation();
+  const [announcement, setAnnouncement] = useState('');
+  const firstRender = useRef(true);
+
+  useEffect(() => {
+    // The initial load is a real page load; the browser handles it.
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    window.scrollTo(0, 0);
+    document.getElementById('main')?.focus();
+    setAnnouncement(document.title);
+  }, [pathname]);
+
+  return (
+    <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+      {announcement}
+    </div>
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -164,6 +195,7 @@ export function App() {
         <BrowserRouter>
           <AuthProvider>
             <AppRoutes />
+            <RouteFocus />
           </AuthProvider>
         </BrowserRouter>
       </ToastProvider>

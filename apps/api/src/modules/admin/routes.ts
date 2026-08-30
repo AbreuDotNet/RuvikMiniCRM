@@ -464,23 +464,29 @@ adminRouter.get(
     if (f.action) { params.push(f.action); where.push(`action = $${params.length}`); }
     if (f.actorUserId) { params.push(f.actorUserId); where.push(`actor_user_id = $${params.length}`); }
     if (f.entityType) { params.push(f.entityType); where.push(`entity_type = $${params.length}`); }
-    params.push(f.limit);
+    // One extra row is the sentinel that tells the client whether to offer
+    // another page; without it a caller can only guess from the page size.
+    params.push(f.limit + 1);
 
     const db = await getDb();
-    const { rows } = await db.query<any>(
+    const { rows: fetched } = await db.query<any>(
       `SELECT id, actor_user_id, actor_role, action, entity_type, entity_id, ip,
               metadata, created_at
          FROM audit_logs WHERE ${where.join(' AND ')}
         ORDER BY id DESC LIMIT $${params.length}`,
       params,
     );
+    const hasMore = fetched.length > f.limit;
+    const rows = hasMore ? fetched.slice(0, f.limit) : fetched;
+
     res.json({
       data: rows.map((r) => ({
         id: Number(r.id), actorUserId: r.actor_user_id, actorRole: r.actor_role,
         action: r.action, entityType: r.entity_type, entityId: r.entity_id,
         ip: r.ip, metadata: r.metadata, createdAt: r.created_at,
       })),
-      nextBefore: rows.length ? Number(rows[rows.length - 1].id) : null,
+      nextBefore: hasMore && rows.length ? Number(rows[rows.length - 1].id) : null,
+      hasMore,
     });
   }),
 );

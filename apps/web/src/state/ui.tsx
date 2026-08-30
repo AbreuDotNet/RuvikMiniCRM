@@ -66,7 +66,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
-    // 'system' removes the attribute so prefers-color-scheme decides.
+    // 'system' removes the attribute so color-scheme falls back to light dark.
     if (theme === 'system') root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', theme);
     try {
@@ -74,6 +74,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       // Preference is not persisted; the session still honours the choice.
     }
+
+    // Keep the browser/status-bar chrome on the header colour. A media-scoped
+    // <meta> cannot do this: it only sees the OS preference, so an explicit
+    // choice of the opposite theme left the status bar inverted. Values match
+    // --brand-surface in theme.css and the inline script in index.html.
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const paintChrome = () => {
+      const dark = theme === 'dark' || (theme === 'system' && media.matches);
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', dark ? '#243B51' : '#3C5A7D');
+    };
+    paintChrome();
+
+    if (theme !== 'system') return;
+    media.addEventListener('change', paintChrome);
+    return () => media.removeEventListener('change', paintChrome);
   }, [theme]);
 
   const value = useMemo(() => ({ theme, setTheme: setThemeState }), [theme]);

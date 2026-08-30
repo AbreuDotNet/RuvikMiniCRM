@@ -3,10 +3,18 @@
    Warm, professional identity for local trade businesses:
    steel blue for structure and trust, terracotta for action, sage for
    positive states. Light and dark are both first-class.
+
+   Every semantic colour is declared once with light-dark(); the theme is
+   selected by `color-scheme` alone (see the three rules below it). That also
+   makes native UI — scrollbars, select popups, date pickers, autofill —
+   follow the theme, which a duplicated custom-property block cannot do.
+
+   Colour pairs in here are held to WCAG 2.2: 4.5:1 for text, 3:1 for the
+   borders and indicators that identify a control (1.4.11).
    ========================================================================== */
 
 :root {
-  /* Brand ramps */
+  /* Brand ramps — raw palette, theme-independent. */
   --slate-900: #16232F;
   --slate-800: #1F3243;
   --slate-700: #2C455D;
@@ -17,59 +25,96 @@
   --slate-100: #E3EAF1;
 
   --terracotta-700: #9E4A2E;
-  --terracotta-600: #B5573A;
+  --terracotta-600: #AE5133;
   --terracotta-500: #C4623F;
   --terracotta-400: #D57E5F;
-  --terracotta-100: #F7E5DE;
+  --terracotta-100: #FAEDE8;
 
+  --sage-800: #3A5445;
   --sage-700: #4A6B55;
   --sage-600: #5E846B;
   --sage-500: #7A9E86;
   --sage-100: #E4EDE7;
 
+  --amber-700: #8A5A17;
   --amber-600: #B4771F;
   --amber-100: #FBEEDA;
 
+  --rose-700: #9E3832;
   --rose-600: #B3453F;
   --rose-100: #F9E3E2;
 
-  /* Semantic tokens — light */
-  --bg: #F6F7F9;
-  --bg-elevated: #FFFFFF;
-  --bg-sunken: #EDEFF3;
-  --bg-inset: #F1F4F7;
-  --surface-hover: #F4F6F9;
+  /* Both themes are declared; `color-scheme` below picks one. */
+  color-scheme: light dark;
 
-  --text: #16232F;
-  --text-muted: #5B6B7C;
-  --text-subtle: #8494A4;
-  --text-inverse: #FFFFFF;
+  /* ------------------------------------------------------ surfaces --- */
+  --bg:            light-dark(#F6F7F9, #0F1721);
+  --bg-elevated:   light-dark(#FFFFFF, #182534);
+  --bg-sunken:     light-dark(#EDEFF3, #0A1119);
+  --bg-inset:      light-dark(#F1F4F7, #1D2C3D);
+  --surface-hover: light-dark(#F4F6F9, #1F3043);
 
-  --border: #DFE5EC;
-  --border-strong: #C6D0DA;
+  /* ---------------------------------------------------------- text --- */
+  --text:         light-dark(#16232F, #E9EFF5);
+  --text-muted:   light-dark(#5B6B7C, #9EB0C2);
+  --text-subtle:  light-dark(#5D6C7E, #8496A8);
+  --text-inverse: light-dark(#FFFFFF, #0F1721);
 
-  --accent: var(--terracotta-500);
-  --accent-hover: var(--terracotta-600);
-  --accent-soft: var(--terracotta-100);
-  --accent-text: #FFFFFF;
+  /* Borders. --border is decorative (card edges, list rules); --border-strong
+     outlines real controls and therefore has to clear 3:1. */
+  --border:        light-dark(#DFE5EC, #24374A);
+  --border-strong: light-dark(#78899C, #5A7891);
 
-  --brand: var(--slate-600);
-  --brand-hover: var(--slate-700);
-  --brand-soft: #E7EDF4;
+  /* -------------------------------------------------------- accent --- */
+  /* Dark enough to serve both as a fill behind --accent-text and as text on
+     any light surface, so one token cannot drift into an unreadable pairing. */
+  --accent:       light-dark(#AE5133, #D5765A);
+  --accent-hover: light-dark(#9E4A2E, #E08B72);
+  --accent-soft:  light-dark(#FAEDE8, #3A2219);
+  --accent-text:  light-dark(#FFFFFF, #17110E);
 
-  --success: var(--sage-700);
-  --success-soft: var(--sage-100);
-  --warning: var(--amber-600);
-  --warning-soft: var(--amber-100);
-  --danger: var(--rose-600);
-  --danger-soft: var(--rose-100);
+  /* --------------------------------------------------------- brand --- */
+  /* Two roles, deliberately split. --brand tints text and links on light
+     surfaces; --brand-surface fills the header, brand buttons and tiles.
+     Collapsing them is what put white-on-light-blue at 3.2:1 in dark mode. */
+  --brand:       light-dark(#3C5A7D, #7CA0C6);
+  --brand-hover: light-dark(#2C455D, #94B2D2);
+  --brand-soft:  light-dark(#E7EDF4, #1B2C3E);
 
-  --focus-ring: 0 0 0 3px rgba(60, 90, 125, 0.35);
+  --brand-surface:       light-dark(#3C5A7D, #243B51);
+  --brand-surface-hover: light-dark(#2C455D, #2F4B65);
+  --brand-surface-text:  #FFFFFF;
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(22, 35, 47, 0.06), 0 1px 3px rgba(22, 35, 47, 0.04);
-  --shadow-md: 0 2px 6px rgba(22, 35, 47, 0.07), 0 6px 16px rgba(22, 35, 47, 0.06);
-  --shadow-lg: 0 8px 28px rgba(22, 35, 47, 0.14);
+  /* ------------------------------------------------------- status --- */
+  --success:      light-dark(#4A6B55, #8FB99C);
+  --success-soft: light-dark(#E4EDE7, #1C2C22);
+  --warning:      light-dark(#8A5A17, #D2A055);
+  --warning-soft: light-dark(#FBEEDA, #302516);
+  --danger:       light-dark(#9E3832, #DE7C77);
+  --danger-soft:  light-dark(#F9E3E2, #331D1C);
+
+  /* Filled status surfaces always carry white text. --success and --danger
+     above are tuned as *text* on tinted backgrounds; in dark mode they are
+     light enough that white on them drops to 2.9:1, so a filled control must
+     use these instead. */
+  --success-surface:      light-dark(#4A6B55, #3A5445);
+  --success-surface-text: #FFFFFF;
+  --danger-surface:       light-dark(#9E3832, #8E322C);
+  --danger-surface-hover: light-dark(#8A302B, #7E2E29);
+  --danger-surface-text:  #FFFFFF;
+
+  /* --------------------------------------------------------- focus --- */
+  /* Two concentric rings: whichever surface the control sits on, one of them
+     contrasts against it. A single translucent ring vanished on the header. */
+  --focus-color: light-dark(#16232F, #E9EFF5);
+  --focus-ring: 0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--focus-color);
+
+  /* ----------------------------------------------------- elevation --- */
+  --shadow-1: light-dark(rgba(22, 35, 47, 0.07), rgba(0, 0, 0, 0.38));
+  --shadow-2: light-dark(rgba(22, 35, 47, 0.05), rgba(0, 0, 0, 0.30));
+  --shadow-sm: 0 1px 2px var(--shadow-1), 0 1px 3px var(--shadow-2);
+  --shadow-md: 0 2px 6px var(--shadow-1), 0 6px 16px var(--shadow-2);
+  --shadow-lg: 0 8px 28px var(--shadow-2), 0 2px 8px var(--shadow-1);
 
   /* Geometry */
   --radius-sm: 8px;
@@ -90,82 +135,11 @@
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
 }
 
-/* Dark theme. Follows the system unless the user has chosen explicitly. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --bg: #0F1721;
-    --bg-elevated: #182534;
-    --bg-sunken: #0A1119;
-    --bg-inset: #1D2C3D;
-    --surface-hover: #1F3043;
-
-    --text: #E9EFF5;
-    --text-muted: #9EB0C2;
-    --text-subtle: #71879C;
-    --text-inverse: #0F1721;
-
-    --border: #24374A;
-    --border-strong: #33495F;
-
-    --accent: #D5765A;
-    --accent-hover: #E08B72;
-    --accent-soft: #3A2219;
-    --accent-text: #17110E;
-
-    --brand: #6E93BB;
-    --brand-hover: #86A6C9;
-    --brand-soft: #1B2C3E;
-
-    --success: #8FB99C;
-    --success-soft: #1C2C22;
-    --warning: #D2A055;
-    --warning-soft: #302516;
-    --danger: #DE7C77;
-    --danger-soft: #331D1C;
-
-    --focus-ring: 0 0 0 3px rgba(133, 168, 204, 0.45);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45);
-    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
-  }
-}
-
-:root[data-theme='dark'] {
-  --bg: #0F1721;
-  --bg-elevated: #182534;
-  --bg-sunken: #0A1119;
-  --bg-inset: #1D2C3D;
-  --surface-hover: #1F3043;
-
-  --text: #E9EFF5;
-  --text-muted: #9EB0C2;
-  --text-subtle: #71879C;
-  --text-inverse: #0F1721;
-
-  --border: #24374A;
-  --border-strong: #33495F;
-
-  --accent: #D5765A;
-  --accent-hover: #E08B72;
-  --accent-soft: #3A2219;
-  --accent-text: #17110E;
-
-  --brand: #6E93BB;
-  --brand-hover: #86A6C9;
-  --brand-soft: #1B2C3E;
-
-  --success: #8FB99C;
-  --success-soft: #1C2C22;
-  --warning: #D2A055;
-  --warning-soft: #302516;
-  --danger: #DE7C77;
-  --danger-soft: #331D1C;
-
-  --focus-ring: 0 0 0 3px rgba(133, 168, 204, 0.45);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
-}
+/* The whole theme switch. No attribute means the system decides; an explicit
+   choice pins it. ThemeProvider sets data-theme, and an inline script in
+   index.html sets it before first paint so the theme never flashes. */
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark']  { color-scheme: dark; }
 
 /* -------------------------------------------------------------- reset --- */
 

@@ -2,8 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import { Shell } from '../../components/Shell';
 import { CUSTOMER_TABS, PROVIDER_TABS, ADMIN_TABS } from '../../components/nav';
 import { Icon, type IconName } from '../../components/Icon';
-import { Button, SkeletonList, ErrorState, EmptyState } from '../../components/ui';
-import { useApi } from '../../lib/useApi';
+import {
+  Button, SkeletonList, ErrorState, EmptyState, LoadMore, RefreshBar,
+} from '../../components/ui';
+import { usePagedApi, type PagedResponse } from '../../lib/useApi';
 import { api } from '../../lib/api';
 import { useAuth } from '../../state/auth';
 import { formatRelative } from '../../lib/format';
@@ -38,12 +40,19 @@ function destinationFor(notification: NotificationRow, role: string): string | n
   return null;
 }
 
+const PAGE_SIZE = 50;
+
+/** The list endpoint also reports the unread badge count. */
+interface NotificationList extends PagedResponse<NotificationRow> {
+  unreadCount: number;
+}
+
 export function NotificationsScreen() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const notifications = useApi(
-    () => api.get<{ data: NotificationRow[]; unreadCount: number }>('/notifications', { limit: 50 }),
+  const notifications = usePagedApi<NotificationRow, NotificationList>(
+    (cursor) => api.get('/notifications', { cursor: cursor ?? undefined, limit: PAGE_SIZE }),
     [],
   );
 
@@ -64,7 +73,7 @@ export function NotificationsScreen() {
     notifications.reload();
   };
 
-  const unread = notifications.data?.unreadCount ?? 0;
+  const unread = notifications.response?.unreadCount ?? 0;
 
   return (
     <Shell
@@ -88,7 +97,7 @@ export function NotificationsScreen() {
         <SkeletonList rows={5} />
       ) : notifications.error ? (
         <ErrorState message={notifications.error} onRetry={notifications.reload} />
-      ) : !notifications.data?.data.length ? (
+      ) : !notifications.items.length ? (
         <EmptyState
           icon="bell"
           title="No notifications"
@@ -96,7 +105,8 @@ export function NotificationsScreen() {
         />
       ) : (
         <div className="list-group">
-          {notifications.data.data.map((notification) => (
+          <RefreshBar active={notifications.refreshing} />
+          {notifications.items.map((notification) => (
             <button
               key={notification.id}
               type="button"
@@ -134,6 +144,15 @@ export function NotificationsScreen() {
               )}
             </button>
           ))}
+
+          <LoadMore
+            hasMore={notifications.hasMore}
+            loading={notifications.loadingMore}
+            error={notifications.moreError}
+            onLoadMore={notifications.loadMore}
+            count={notifications.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
 

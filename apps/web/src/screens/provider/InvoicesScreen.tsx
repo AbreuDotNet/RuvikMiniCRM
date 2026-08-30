@@ -5,8 +5,9 @@ import { PROVIDER_TABS } from '../../components/nav';
 import { Icon } from '../../components/Icon';
 import {
   Button, StatusPill, SkeletonList, ErrorState, EmptyState, Banner, SelectField, TextField,
+  LoadMore, RefreshBar,
 } from '../../components/ui';
-import { useApi } from '../../lib/useApi';
+import { useApi, usePagedApi, type PagedResponse } from '../../lib/useApi';
 import { api, ApiError, newIdempotencyKey } from '../../lib/api';
 import { useToast } from '../../state/ui';
 import { formatMoney, formatDate } from '../../lib/format';
@@ -25,8 +26,8 @@ interface InvoiceRow {
   job: { id: string; title: string } | null;
 }
 
-interface InvoiceList {
-  data: InvoiceRow[];
+/** The list endpoint also carries the outstanding/paid totals. */
+interface InvoiceList extends PagedResponse<InvoiceRow> {
   summary: { outstandingCents: number; paidCents: number };
 }
 
@@ -38,13 +39,17 @@ const FILTERS = [
   { value: 'paid', label: 'Paid' },
 ];
 
+const PAGE_SIZE = 30;
+
 export function InvoicesScreen() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const status = params.get('status') ?? '';
 
-  const invoices = useApi(
-    () => api.get<InvoiceList>('/invoices', { status: status || undefined, limit: 30 }),
+  const invoices = usePagedApi<InvoiceRow, InvoiceList>(
+    (cursor) => api.get('/invoices', {
+      status: status || undefined, cursor: cursor ?? undefined, limit: PAGE_SIZE,
+    }),
     [status],
   );
 
@@ -63,17 +68,17 @@ export function InvoicesScreen() {
         </button>
       }
     >
-      {invoices.data && (
+      {invoices.response && (
         <div className="stat-grid" style={{ marginBottom: 'var(--s4)' }}>
           <div className="stat-tile stat-tile--accent" style={{ cursor: 'default' }}>
             <span className="stat-tile__value tabular">
-              {formatMoney(invoices.data.summary.outstandingCents)}
+              {formatMoney(invoices.response.summary.outstandingCents)}
             </span>
             <span className="stat-tile__label">Outstanding</span>
           </div>
           <div className="stat-tile" style={{ cursor: 'default' }}>
             <span className="stat-tile__value tabular" style={{ color: 'var(--success)' }}>
-              {formatMoney(invoices.data.summary.paidCents)}
+              {formatMoney(invoices.response.summary.paidCents)}
             </span>
             <span className="stat-tile__label">Collected</span>
           </div>
@@ -103,7 +108,7 @@ export function InvoicesScreen() {
         <SkeletonList rows={5} />
       ) : invoices.error ? (
         <ErrorState message={invoices.error} onRetry={invoices.reload} />
-      ) : !invoices.data?.data.length ? (
+      ) : !invoices.items.length ? (
         <EmptyState
           icon="receipt"
           title={status ? 'Nothing here' : 'No invoices yet'}
@@ -115,8 +120,9 @@ export function InvoicesScreen() {
           action={<Button icon="plus" onClick={() => navigate('/invoices/new')}>New invoice</Button>}
         />
       ) : (
-        <div className="stack">
-          {invoices.data.data.map((invoice) => (
+        <div className="stack results-stack" aria-busy={invoices.refreshing}>
+          <RefreshBar active={invoices.refreshing} />
+          {invoices.items.map((invoice) => (
             <button
               key={invoice.id}
               type="button"
@@ -152,6 +158,15 @@ export function InvoicesScreen() {
               )}
             </button>
           ))}
+
+          <LoadMore
+            hasMore={invoices.hasMore}
+            loading={invoices.loadingMore}
+            error={invoices.moreError}
+            onLoadMore={invoices.loadMore}
+            count={invoices.items.length}
+            pageSize={PAGE_SIZE}
+          />
         </div>
       )}
     </Shell>
