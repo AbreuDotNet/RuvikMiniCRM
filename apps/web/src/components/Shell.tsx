@@ -43,22 +43,22 @@ export function Shell({ title, tabs, children, back, action, flush }: ShellProps
       <div className="railed-body">
         <header className="app-header">
           <div className="app-header__inner">
-            {back ? (
+            {/* No spacer when there is no back button: the title is
+                left-aligned, so it should start at the content margin. */}
+            {back && (
               <button
                 type="button"
-                className="app-header__action"
+                className="app-header__action app-header__action--back"
                 onClick={() => (typeof back === 'string' ? navigate(back) : navigate(-1))}
                 aria-label="Go back"
               >
                 <Icon name="back" size={20} />
               </button>
-            ) : (
-              <span style={{ width: 40, flexShrink: 0 }} aria-hidden="true" />
             )}
 
             <h1 className="app-header__title">{title}</h1>
 
-            {action ?? <span style={{ width: 40, flexShrink: 0 }} aria-hidden="true" />}
+            {action}
           </div>
         </header>
 
@@ -116,6 +116,25 @@ export function ToastRegion() {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * Header route to the account screen. The admin tab bar is full at five
+ * items, so admins reach their own settings — sign out, password, and the
+ * two-factor enrolment their privileged actions require — from here.
+ */
+export function AccountAction() {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      className="app-header__action"
+      onClick={() => navigate('/profile')}
+      aria-label="Account and settings"
+    >
+      <Icon name="user" size={20} />
+    </button>
   );
 }
 

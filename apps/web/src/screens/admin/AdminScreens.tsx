@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Shell } from '../../components/Shell';
 import { ADMIN_TABS } from '../../components/nav';
+import { AccountAction } from '../../components/Shell';
 import { Icon } from '../../components/Icon';
 import {
   Button, Pill, StatusPill, Avatar, Stars, SkeletonList, ErrorState, EmptyState,
@@ -32,7 +33,7 @@ export function AdminDashboardScreen() {
   const metrics = useApi(() => api.get<Metrics>('/admin/metrics'), []);
 
   return (
-    <Shell title="Admin Overview" tabs={ADMIN_TABS}>
+    <Shell title="Overview" tabs={ADMIN_TABS} action={<AccountAction />}>
       {metrics.loading ? (
         <SkeletonList rows={4} />
       ) : metrics.error || !metrics.data ? (
@@ -184,7 +185,7 @@ export function AdminProvidersScreen() {
   );
 
   return (
-    <Shell title="Providers" tabs={ADMIN_TABS}>
+    <Shell title="Providers" tabs={ADMIN_TABS} action={<AccountAction />}>
       <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
         {VERIFICATION_FILTERS.map((option) => (
           <button
@@ -392,7 +393,7 @@ export function AdminUsersScreen() {
   );
 
   return (
-    <Shell title="Users" tabs={ADMIN_TABS}>
+    <Shell title="Users" tabs={ADMIN_TABS} action={<AccountAction />}>
       <div className="search-input-wrap" style={{ marginBottom: 'var(--s3)' }}>
         <Icon name="search" size={19} />
         <input
@@ -592,7 +593,7 @@ export function AdminReviewsScreen() {
   };
 
   return (
-    <Shell title="Reviews" tabs={ADMIN_TABS}>
+    <Shell title="Reviews" tabs={ADMIN_TABS} action={<AccountAction />}>
       <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
         {[
           { value: '', label: 'All' },
@@ -771,7 +772,7 @@ export function AdminAuditScreen() {
   };
 
   return (
-    <Shell title="Audit log" tabs={ADMIN_TABS}>
+    <Shell title="Audit log" tabs={ADMIN_TABS} action={<AccountAction />}>
       <div className="card card--pad" style={{ marginBottom: 'var(--s4)' }}>
         <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
           <div>

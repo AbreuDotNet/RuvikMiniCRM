@@ -145,8 +145,7 @@ export function QuoteBuilderScreen() {
   };
 
   return (
-    <Shell title="Quote Builder" tabs={PROVIDER_TABS} back>
-      <h2 style={{ marginBottom: 'var(--s4)' }}>New Quote</h2>
+    <Shell title="New quote" tabs={PROVIDER_TABS} back>
 
       {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
 

@@ -45,7 +45,7 @@ export function ServiceDetailScreen() {
   const s = service.data;
 
   return (
-    <Shell title="Service details" tabs={CUSTOMER_TABS} back>
+    <Shell title="Service" tabs={CUSTOMER_TABS} back>
       <div className="card card--pad" style={{ marginBottom: 'var(--s4)' }}>
         <div className="row" style={{ marginBottom: 'var(--s3)' }}>
           <div className="avatar avatar--lg" style={{ background: 'var(--brand-soft)', color: 'var(--brand)' }}>
@@ -124,11 +124,7 @@ export function ServiceDetailScreen() {
         </button>
       </section>
 
-      <div
-        style={{
-          position: 'sticky', bottom: 'var(--s3)', marginTop: 'var(--s6)',
-        }}
-      >
+      <div className="sticky-action">
         <Button
           block
           size="lg"

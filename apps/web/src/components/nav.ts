@@ -8,7 +8,7 @@ export const CUSTOMER_TABS: TabItem[] = [
   { to: '/home', label: 'Home', icon: 'home' },
   { to: '/search', label: 'Search', icon: 'search' },
   { to: '/requests', label: 'Requests', icon: 'clipboard' },
-  { to: '/notifications', label: 'Messages', icon: 'chat' },
+  { to: '/notifications', label: 'Alerts', icon: 'bell' },
   { to: '/profile', label: 'Profile', icon: 'user' },
 ];
 

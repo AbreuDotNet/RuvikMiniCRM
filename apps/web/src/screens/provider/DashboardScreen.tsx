@@ -39,7 +39,7 @@ export function ProviderDashboardScreen() {
 
   return (
     <Shell
-      title="Provider Dashboard"
+      title="Dashboard"
       tabs={PROVIDER_TABS}
       action={<BellAction unread={notifications.data?.unreadCount ?? 0} />}
     >

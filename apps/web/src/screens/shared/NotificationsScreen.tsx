@@ -77,7 +77,7 @@ export function NotificationsScreen() {
 
   return (
     <Shell
-      title="Notifications"
+      title="Alerts"
       tabs={tabs}
       action={
         unread > 0 ? (

@@ -11,14 +11,35 @@
   background: var(--bg);
 }
 
+/* The header belongs to the page rather than sitting on top of it as a
+   coloured bar: it takes the page background and only separates itself once
+   content scrolls underneath. That keeps the brand colour for actions, and
+   stops the bar stacking a second blue on the screens that open with a
+   brand-coloured hero. */
 .app-header {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--brand-surface);
-  color: var(--brand-surface-text);
+  background: var(--bg);
+  color: var(--text);
   padding-top: env(safe-area-inset-top);
-  box-shadow: var(--shadow-sm);
+  border-bottom: 1px solid var(--border);
+}
+
+@keyframes header-detach {
+  from { border-bottom-color: transparent; box-shadow: none; }
+  to   { border-bottom-color: var(--border); box-shadow: var(--shadow-sm); }
+}
+
+/* Driven by scroll position, so there is no scroll listener and no re-render
+   per frame. Where it is unsupported the separator is simply always drawn. */
+@supports (animation-timeline: scroll()) {
+  .app-header {
+    border-bottom-color: transparent;
+    animation: header-detach linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 0 16px;
+  }
 }
 
 .app-header__inner {
@@ -34,11 +55,10 @@
 
 .app-header__title {
   flex: 1;
-  font-size: 0.94rem;
+  min-width: 0;
+  font-size: 1.05rem;
   font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  text-align: center;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -52,13 +72,17 @@
   min-height: 40px;
   border: none;
   background: transparent;
-  color: var(--brand-surface-text);
+  color: var(--text);
   border-radius: var(--radius);
   cursor: pointer;
   position: relative;
   flex-shrink: 0;
 }
-.app-header__action:hover { background: rgba(255, 255, 255, 0.14); }
+.app-header__action:hover { background: var(--surface-hover); }
+
+/* Pulls the glyph out to the content margin so the title lands where the
+   body text below it starts. */
+.app-header__action--back { margin-left: calc(var(--s2) * -1); }
 
 .app-header__badge {
   position: absolute;
@@ -72,7 +96,7 @@
   font-weight: 700;
   display: grid;
   place-items: center;
-  border: 2px solid var(--brand-surface-text);
+  border: 2px solid var(--bg);
 }
 
 .app-main {
@@ -1068,6 +1092,40 @@
   display: flex;
   flex-direction: column;
   gap: var(--s2);
+}
+
+/* A primary action that has to stay reachable on a long page.
+   It carries its own background and clears the tab bar: a bare sticky button
+   let the page scroll visibly through the gap around it, and pinned 12px from
+   the bottom it sat inside the band the fixed tab bar occupies, so on a phone
+   it disappeared behind the tab bar exactly when it was needed. */
+.sticky-action {
+  position: sticky;
+  bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + var(--s2));
+  /* Under the header (20) and the tab bar (30), over the page content. */
+  z-index: 10;
+  margin: var(--s6) calc(var(--s4) * -1) 0;
+  padding: var(--s3) var(--s4);
+  background: var(--bg);
+}
+
+/* Fades content out as it passes underneath instead of cutting it mid-line.
+   Both this and the background match the page, so at rest — when the action
+   sits at the natural end of the content — neither is visible. */
+.sticky-action::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: var(--s5);
+  background: linear-gradient(to top, var(--bg), transparent);
+  pointer-events: none;
+}
+
+@media (min-width: 900px) {
+  /* The tab bar becomes a side rail, so nothing is reserved along the bottom. */
+  .sticky-action { bottom: var(--s2); }
 }
 
 .price-tag {

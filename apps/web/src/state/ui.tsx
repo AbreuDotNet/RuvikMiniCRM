@@ -75,16 +75,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       // Preference is not persisted; the session still honours the choice.
     }
 
-    // Keep the browser/status-bar chrome on the header colour. A media-scoped
-    // <meta> cannot do this: it only sees the OS preference, so an explicit
-    // choice of the opposite theme left the status bar inverted. Values match
-    // --brand-surface in theme.css and the inline script in index.html.
+    // Keep the browser/status-bar chrome on the colour the top of the page
+    // actually is. A media-scoped <meta> cannot do this: it only sees the OS
+    // preference, so an explicit choice of the opposite theme left the status
+    // bar inverted. Values match --bg in theme.css and index.html's script.
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const paintChrome = () => {
       const dark = theme === 'dark' || (theme === 'system' && media.matches);
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', dark ? '#243B51' : '#3C5A7D');
+        ?.setAttribute('content', dark ? '#0F1721' : '#F6F7F9');
     };
     paintChrome();
 

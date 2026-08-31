@@ -230,7 +230,7 @@ export function InvoiceBuilderScreen() {
   };
 
   return (
-    <Shell title="New Invoice" tabs={PROVIDER_TABS} back>
+    <Shell title="New invoice" tabs={PROVIDER_TABS} back>
       {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
 
       {quotes.loading ? (

@@ -29,7 +29,7 @@ export function CustomerHomeScreen() {
 
   return (
     <Shell
-      title="Customer Home"
+      title="Home"
       tabs={CUSTOMER_TABS}
       action={<BellAction unread={home.data?.unreadNotifications ?? 0} />}
     >

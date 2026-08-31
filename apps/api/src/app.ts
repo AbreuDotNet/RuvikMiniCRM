@@ -61,7 +61,16 @@ export function createApp(): Express {
       origin(origin, callback) {
         if (!origin) return callback(null, true); // native apps and curl send no Origin
         if (allowedOrigins.has(origin)) return callback(null, true);
-        callback(new Error('Origin not allowed by CORS'));
+        // Not an error. A disallowed origin simply gets no
+        // Access-Control-Allow-Origin header, which is what the fetch spec
+        // asks for: the browser refuses to expose the response to the page.
+        // Raising instead turned a routine browser-side rejection into an
+        // unhandled 500 and filled the error log with phantom server faults.
+        //
+        // CORS is not authorisation — Origin is trivially forged off-browser —
+        // so this must not be mistaken for an access control. The real
+        // controls are authentication and the CSRF defences around them.
+        callback(null, false);
       },
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],

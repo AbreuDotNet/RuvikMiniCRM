@@ -33,7 +33,7 @@ export function RequestsScreen() {
   );
 
   return (
-    <Shell title="My Requests" tabs={CUSTOMER_TABS}>
+    <Shell title="Requests" tabs={CUSTOMER_TABS}>
       <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
         {FILTERS.map((filter) => (
           <button

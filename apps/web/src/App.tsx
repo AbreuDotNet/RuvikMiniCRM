@@ -108,8 +108,12 @@ function RouteFocus() {
       firstRender.current = false;
       return;
     }
+    // preventScroll is load-bearing. <main> starts below the sticky header, so
+    // a plain focus() makes the browser scroll it up to the top of the
+    // scrollport — landing the page at exactly the header's height and undoing
+    // the reset on the line below. Reset after focusing, for good measure.
+    document.getElementById('main')?.focus({ preventScroll: true });
     window.scrollTo(0, 0);
-    document.getElementById('main')?.focus();
     setAnnouncement(document.title);
   }, [pathname]);
 
