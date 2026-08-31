@@ -316,7 +316,14 @@
 }
 .input::placeholder, .textarea::placeholder { color: var(--text-subtle); }
 .input:hover, .select:hover, .textarea:hover { border-color: var(--brand); }
-.input[aria-invalid='true'], .textarea[aria-invalid='true'] { border-color: var(--danger); }
+/* Un borde de 1px de color no basta por si solo: refuerza con grosor, para no
+   depender del color como unico indicador (WCAG 1.4.1). */
+.input[aria-invalid='true'],
+.select[aria-invalid='true'],
+.textarea[aria-invalid='true'] {
+  border-color: var(--danger);
+  border-width: 2px;
+}
 
 .textarea { min-height: 108px; resize: vertical; line-height: 1.55; }
 
@@ -726,6 +733,27 @@
 .modal__body { color: var(--text-muted); margin-bottom: var(--s5); font-size: 0.92rem; }
 .modal__actions { display: flex; gap: var(--s3); }
 .modal__actions .btn { flex: 1; }
+
+/* Resumen de campos a corregir dentro del dialogo. */
+.issue-list {
+  list-style: none;
+  margin: 0 0 var(--s5);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.issue-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s3);
+  border-radius: var(--radius);
+  background: var(--bg);
+  border-left: 3px solid var(--danger);
+}
+.issue-list__field { font-weight: 650; font-size: 0.88rem; color: var(--text); }
+.issue-list__message { font-size: 0.85rem; color: var(--text-muted); }
 
 /* --------------------------------------------------------------- hero ---- */
 

@@ -136,7 +136,13 @@ export function SelectField({ label, hint, error, options, ...rest }: SelectFiel
   return (
     <FieldWrap label={label} hint={hint} error={error}>
       {(id, describedBy) => (
-        <select id={id} className="select" aria-describedby={describedBy} {...rest}>
+        <select
+          id={id}
+          className="select"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          {...rest}
+        >
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       )}
