@@ -6,17 +6,14 @@ import { asyncHandler } from '../../middleware/errorHandler.js';
 import { authenticate, requireProvider, requireRole, tenantId } from '../../middleware/auth.js';
 import { limiters } from '../../middleware/rateLimit.js';
 import { idempotency } from '../../middleware/idempotency.js';
-import { validate, validated, uuidSchema, safeText, moneyCents, isoDate } from '../../middleware/validate.js';
+import {
+  validate, validated, uuidSchema, safeText, moneyCents, isoDate, billingLineSchema,
+} from '../../middleware/validate.js';
 import { paginationSchema, decodeCursor, buildPage } from '../../lib/pagination.js';
 
 export const quotesRouter = Router();
 
-const lineSchema = z.object({
-  description: safeText(300, 1),
-  quantity: z.number().positive().max(100_000),
-  unitPriceCents: moneyCents,
-  taxRateBp: z.number().int().min(0).max(10_000).default(0),
-});
+const lineSchema = billingLineSchema;
 
 const createSchema = z.object({
   jobId: uuidSchema,

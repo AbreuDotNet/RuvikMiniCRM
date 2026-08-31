@@ -145,3 +145,42 @@ export const safeText = (max: number, min = 1) =>
 
 export const moneyCents = z.number().int().min(0).max(100_000_000);
 export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD.');
+
+export const TAX_TREATMENTS = ['taxable', 'exempt', 'not_subject'] as const;
+
+/**
+ * One line of a quote or invoice.
+ *
+ * Shared by both documents so an invoice raised from a quote cannot validate
+ * its lines differently from the quote the customer accepted.
+ *
+ * A line that carries no tax must say why. "Exempt" (in scope, relieved —
+ * usually by a certificate the seller has to retain) and "not subject"
+ * (outside the tax's scope, such as labour on residential real property in
+ * Texas) are different answers, and an auditor asks which one applied.
+ */
+export const billingLineSchema = z
+  .object({
+    description: safeText(300, 1),
+    quantity: z.number().positive().max(100_000),
+    unitPriceCents: moneyCents,
+    /**
+     * Capped at 15%, matching the provider's default-rate bound: the highest
+     * US combined state-plus-local rate is around 12%, so a higher figure is
+     * a typo or a VAT rate rather than sales tax.
+     */
+    taxRateBp: z.number().int().min(0).max(1500).default(0),
+    taxTreatment: z.enum(TAX_TREATMENTS).default('taxable'),
+    taxReason: safeText(200).optional().nullable(),
+  })
+  .refine((l) => l.taxTreatment === 'taxable' || Boolean(l.taxReason?.trim()), {
+    message: 'Say why this line is not taxed — for example an exemption certificate on file, or labour outside the tax’s scope.',
+    path: ['taxReason'],
+  });
+
+/** Two-letter USPS state code; the jurisdiction whose rules a document is priced under. */
+export const usStateSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z]{2}$/, 'Use the two-letter state code, e.g. TX.');

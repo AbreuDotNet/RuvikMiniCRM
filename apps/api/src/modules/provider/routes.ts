@@ -4,7 +4,9 @@ import { getDb } from '../../db/index.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import { authenticate, requireProvider, tenantId } from '../../middleware/auth.js';
 import { limiters } from '../../middleware/rateLimit.js';
-import { validate, validated, uuidSchema, safeText, phoneSchema, moneyCents } from '../../middleware/validate.js';
+import {
+  validate, validated, uuidSchema, safeText, phoneSchema, moneyCents, usStateSchema,
+} from '../../middleware/validate.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { writeAudit } from '../../lib/audit.js';
 import { signStorageUrl } from '../../lib/storage.js';
@@ -66,6 +68,87 @@ const COLUMN_MAP: Record<string, string> = {
   certifications: 'certifications',
   isPublished: 'is_published',
 };
+
+/**
+ * Sales tax settings for this provider.
+ *
+ * Deliberately per provider and defaulting to zero. There is no federal sales
+ * tax in the United States and no rate that is correct everywhere: five states
+ * levy no general sales tax at all, and combined state-plus-local rates vary
+ * by locality. A shipped default would be wrong for almost every user, so an
+ * unset rate stays zero and the quote screen leaves the field blank rather
+ * than inventing a figure.
+ */
+providerRouter.get(
+  '/tax-settings',
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const { rows } = await db.query<any>(
+      `SELECT tax_state, default_tax_rate_bp, tax_jurisdiction_note
+         FROM providers WHERE id = $1`,
+      [tenantId(req)],
+    );
+    if (!rows.length) throw notFound('Provider profile not found.');
+    res.json({
+      taxState: rows[0].tax_state,
+      defaultTaxRateBp: rows[0].default_tax_rate_bp,
+      jurisdictionNote: rows[0].tax_jurisdiction_note,
+    });
+  }),
+);
+
+providerRouter.patch(
+  '/tax-settings',
+  validate(
+    z.object({
+      taxState: usStateSchema.optional().nullable(),
+      /**
+       * Capped at 15%. The highest US combined state-plus-local rate sits
+       * around 12%, so anything above this is a typo or a rate meant for a
+       * VAT country — this app previously defaulted to 18%, which is the
+       * Dominican ITBIS and is not a US sales tax rate anywhere.
+       */
+      defaultTaxRateBp: z.number().int().min(0).max(1500).optional(),
+      jurisdictionNote: safeText(200).optional().nullable(),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    // `validated()` reads query params; this payload is a body.
+    const input = req.body as {
+      taxState?: string | null; defaultTaxRateBp?: number; jurisdictionNote?: string | null;
+    };
+    const db = await getDb();
+    const { rows } = await db.query<any>(
+      `UPDATE providers
+          SET tax_state = COALESCE($2, tax_state),
+              default_tax_rate_bp = COALESCE($3, default_tax_rate_bp),
+              tax_jurisdiction_note = COALESCE($4, tax_jurisdiction_note),
+              updated_at = now()
+        WHERE id = $1
+        RETURNING tax_state, default_tax_rate_bp, tax_jurisdiction_note`,
+      [tenantId(req), input.taxState ?? null, input.defaultTaxRateBp ?? null,
+       input.jurisdictionNote ?? null],
+    );
+    if (!rows.length) throw notFound('Provider profile not found.');
+
+    // A rate change alters every document raised afterwards, so it belongs in
+    // the audit trail rather than only in the row.
+    await writeAudit({
+      actorUserId: req.auth!.userId, actorRole: 'provider', action: 'provider.tax_settings_updated',
+      entityType: 'provider', entityId: tenantId(req),
+      metadata: {
+        taxState: rows[0].tax_state,
+        defaultTaxRateBp: rows[0].default_tax_rate_bp,
+      },
+    });
+
+    res.json({
+      taxState: rows[0].tax_state,
+      defaultTaxRateBp: rows[0].default_tax_rate_bp,
+      jurisdictionNote: rows[0].tax_jurisdiction_note,
+    });
+  }),
+);
 
 providerRouter.get(
   '/profile',

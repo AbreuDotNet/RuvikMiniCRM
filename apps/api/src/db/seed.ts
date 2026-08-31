@@ -268,8 +268,8 @@ export async function seed(): Promise<void> {
     title: 'Master bathroom toilet running constantly',
     description: 'The toilet in the main bathroom keeps running after flushing and the water bill has jumped.',
     lines: [
-      { description: 'Toilet repair — full valve replacement', quantity: 1, unitPriceCents: 12000, taxRateBp: 1800 },
-      { description: 'Labour (hours)', quantity: 1.5, unitPriceCents: 4500, taxRateBp: 1800 },
+      { description: 'Toilet repair — full valve replacement', quantity: 1, unitPriceCents: 12000, taxRateBp: 825 },
+      { description: 'Labour (hours)', quantity: 1.5, unitPriceCents: 4500, taxRateBp: 825 },
     ],
     outcome: 'completed_paid_reviewed',
     rating: 5,
@@ -283,8 +283,8 @@ export async function seed(): Promise<void> {
     title: 'Breaker panel keeps tripping in the kitchen',
     description: 'The kitchen circuit trips whenever the microwave and kettle run together. House is from 1998.',
     lines: [
-      { description: 'Electrical panel upgrade (200A)', quantity: 1, unitPriceCents: 45000, taxRateBp: 1800 },
-      { description: 'Dedicated kitchen circuit', quantity: 1, unitPriceCents: 9500, taxRateBp: 1800 },
+      { description: 'Electrical panel upgrade (200A)', quantity: 1, unitPriceCents: 45000, taxRateBp: 825 },
+      { description: 'Dedicated kitchen circuit', quantity: 1, unitPriceCents: 9500, taxRateBp: 825 },
     ],
     outcome: 'quote_sent',
   });
@@ -296,8 +296,8 @@ export async function seed(): Promise<void> {
     title: 'Fitted wardrobe for the main bedroom',
     description: 'Looking for a floor-to-ceiling wardrobe, roughly 3.2m wide, with sliding doors and internal drawers.',
     lines: [
-      { description: 'Fitted wardrobe — design and build (3.2m)', quantity: 1, unitPriceCents: 185000, taxRateBp: 1800 },
-      { description: 'Sliding door upgrade', quantity: 2, unitPriceCents: 22000, taxRateBp: 1800 },
+      { description: 'Fitted wardrobe — design and build (3.2m)', quantity: 1, unitPriceCents: 185000, taxRateBp: 825 },
+      { description: 'Sliding door upgrade', quantity: 2, unitPriceCents: 22000, taxRateBp: 825 },
     ],
     outcome: 'scheduled',
   });
@@ -319,7 +319,7 @@ export async function seed(): Promise<void> {
     title: 'Kitchen sink draining slowly',
     description: 'Water pools in the sink and drains away very slowly. Plunger has not helped.',
     lines: [
-      { description: 'Drain clearing and trap clean', quantity: 1, unitPriceCents: 6500, taxRateBp: 1800 },
+      { description: 'Drain clearing and trap clean', quantity: 1, unitPriceCents: 6500, taxRateBp: 825 },
     ],
     outcome: 'completed_paid_reviewed',
     rating: 4,
@@ -594,7 +594,7 @@ async function buildPipeline(
 
       const quoteNumber = await nextNumber(c, providerId, 'quote');
       const totals = computeTotals(
-        [{ description: work.title, quantity: 1, unitPriceCents: work.cents, taxRateBp: 1800 }], 0,
+        [{ description: work.title, quantity: 1, unitPriceCents: work.cents, taxRateBp: 825 }], 0,
       );
       const { rows: quoteRows } = await c.query(
         `INSERT INTO quotes (provider_id, job_id, number, status, currency, subtotal_cents,
@@ -608,7 +608,7 @@ async function buildPipeline(
       await c.query(
         `INSERT INTO quote_items (quote_id, description, quantity, unit_price_cents,
                                   tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,1,$3,1800,$4,0)`,
+         VALUES ($1,$2,1,$3,825,$4,0)`,
         [quoteRows[0].id, work.title, work.cents, totals.lines[0].lineTotalCents],
       );
       await c.query(
@@ -633,7 +633,7 @@ async function buildPipeline(
       );
 
       const totals = computeTotals(
-        [{ description: unpaid.title, quantity: 1, unitPriceCents: unpaid.cents, taxRateBp: 1800 }], 0,
+        [{ description: unpaid.title, quantity: 1, unitPriceCents: unpaid.cents, taxRateBp: 825 }], 0,
       );
       const invoiceNumber = await nextNumber(c, providerId, 'invoice');
       const { rows: invRows } = await c.query(
@@ -651,7 +651,7 @@ async function buildPipeline(
       await c.query(
         `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price_cents,
                                     tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,1,$3,1800,$4,0)`,
+         VALUES ($1,$2,1,$3,825,$4,0)`,
         [invRows[0].id, unpaid.title, unpaid.cents, totals.lines[0].lineTotalCents],
       );
       await c.query('UPDATE providers SET completed_jobs = completed_jobs + 1 WHERE id = $1', [providerId]);
@@ -673,7 +673,7 @@ async function buildPipeline(
       );
 
       const totals = computeTotals(
-        [{ description: past.title, quantity: 1, unitPriceCents: past.cents, taxRateBp: 1800 }], 0,
+        [{ description: past.title, quantity: 1, unitPriceCents: past.cents, taxRateBp: 825 }], 0,
       );
       const invoiceNumber = await nextNumber(c, providerId, 'invoice');
       const { rows: invRows } = await c.query(
@@ -694,7 +694,7 @@ async function buildPipeline(
       await c.query(
         `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price_cents,
                                     tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,1,$3,1800,$4,0)`,
+         VALUES ($1,$2,1,$3,825,$4,0)`,
         [invRows[0].id, past.title, past.cents, totals.lines[0].lineTotalCents],
       );
       await c.query(

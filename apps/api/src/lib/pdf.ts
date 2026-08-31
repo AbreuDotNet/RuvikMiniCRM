@@ -26,6 +26,9 @@ export interface DocumentLine {
   unitPriceCents: number;
   taxRateBp: number;
   lineTotalCents: number;
+  taxTreatment?: 'taxable' | 'exempt' | 'not_subject';
+  /** Printed beneath the line when no tax was charged. */
+  taxReason?: string | null;
 }
 
 export interface RenderDocumentInput {
@@ -43,6 +46,12 @@ export interface RenderDocumentInput {
   discountCents: number;
   taxCents: number;
   totalCents: number;
+  /** Portion of the discounted subtotal sales tax was charged on. */
+  taxableBaseCents?: number;
+  /** Portion carrying no tax, exempt or out of scope. */
+  untaxedBaseCents?: number;
+  /** Two-letter state the document was priced under, if recorded. */
+  taxJurisdiction?: string | null;
   amountPaidCents?: number;
   notes?: string | null;
   terms?: string | null;
@@ -183,7 +192,22 @@ export async function renderDocument(input: RenderDocumentInput): Promise<Render
 
   totalRow('Subtotal', money(input.subtotalCents));
   if (input.discountCents > 0) totalRow('Discount', `- ${money(input.discountCents)}`);
-  if (input.taxCents > 0) totalRow('Tax', money(input.taxCents));
+
+  // Show what tax was charged on, not just the figure. A customer — or an
+  // auditor — has to be able to see which part of the document was taxed
+  // without recomputing it, especially when some lines are relieved.
+  const untaxed = input.untaxedBaseCents ?? 0;
+  if (untaxed > 0 && typeof input.taxableBaseCents === 'number') {
+    totalRow('Taxable amount', money(input.taxableBaseCents));
+    totalRow('Non-taxable amount', money(untaxed));
+  }
+  if (input.taxCents > 0) {
+    const where = input.taxJurisdiction ? ` (${input.taxJurisdiction})` : '';
+    totalRow(`Sales tax${where}`, money(input.taxCents));
+  } else if (input.subtotalCents > 0) {
+    // Silence is not an answer: say that no tax was charged.
+    totalRow('Sales tax', 'None');
+  }
 
   doc.rect(left + pageWidth * 0.52, y - 4, pageWidth * 0.48, 30).fill(BRAND.panel);
   totalRow('TOTAL', money(input.totalCents), true, BRAND.terracotta);

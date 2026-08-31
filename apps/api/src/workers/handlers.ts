@@ -42,7 +42,8 @@ async function generatePdf(payload: Record<string, any>): Promise<void> {
   }
 
   const items = await db.query<any>(
-    `SELECT description, quantity, unit_price_cents, tax_rate_bp, line_total_cents
+    `SELECT description, quantity, unit_price_cents, tax_rate_bp, line_total_cents,
+            tax_treatment, tax_reason
        FROM ${itemsTable} WHERE ${fkColumn} = $1 ORDER BY sort_order`,
     [id],
   );
@@ -53,6 +54,8 @@ async function generatePdf(payload: Record<string, any>): Promise<void> {
     unitPriceCents: i.unit_price_cents,
     taxRateBp: i.tax_rate_bp,
     lineTotalCents: i.line_total_cents,
+    taxTreatment: i.tax_treatment,
+    taxReason: i.tax_reason,
   }));
 
   const asDate = (v: unknown) =>
@@ -86,6 +89,9 @@ async function generatePdf(payload: Record<string, any>): Promise<void> {
     discountCents: doc.discount_cents,
     taxCents: doc.tax_cents,
     totalCents: doc.total_cents,
+    taxableBaseCents: doc.taxable_base_cents,
+    untaxedBaseCents: doc.untaxed_base_cents,
+    taxJurisdiction: doc.tax_jurisdiction,
     amountPaidCents: kind === 'invoice' ? doc.amount_paid_cents : undefined,
     notes: doc.notes,
     terms: kind === 'quote' ? doc.terms : null,

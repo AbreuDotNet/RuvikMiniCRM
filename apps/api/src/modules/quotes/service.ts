@@ -1,5 +1,5 @@
 import { getDb } from '../../db/index.js';
-import { computeTotals, type LineInput } from '../../lib/money.js';
+import { computeTotals, type LineInput, type TaxTreatment } from '../../lib/money.js';
 import { nextNumber } from '../../lib/numbering.js';
 import { conflict, notFound, forbidden } from '../../lib/errors.js';
 import { enqueue } from '../../lib/queue.js';
@@ -13,6 +13,8 @@ export interface QuoteLineInput {
   quantity: number;
   unitPriceCents: number;
   taxRateBp: number;
+  taxTreatment?: TaxTreatment;
+  taxReason?: string | null;
 }
 
 export interface CreateQuoteInput {
@@ -31,6 +33,8 @@ const toLineInputs = (lines: QuoteLineInput[]): LineInput[] =>
     quantity: l.quantity,
     unitPriceCents: l.unitPriceCents,
     taxRateBp: l.taxRateBp,
+    taxTreatment: l.taxTreatment ?? 'taxable',
+    taxReason: l.taxReason ?? null,
   }));
 
 /**
@@ -53,25 +57,40 @@ export async function createQuote(
     );
     if (!jobRows.length) throw notFound('That job was not found.');
 
+    // Snapshot of the jurisdiction as it stands now. Reading it back through
+    // the provider's current setting would let a later move to another state
+    // silently restate the basis of a document the customer already accepted.
+    const { rows: taxRows } = await c.query<{ tax_state: string | null }>(
+      'SELECT tax_state FROM providers WHERE id = $1',
+      [providerId],
+    );
+    const jurisdiction = taxRows[0]?.tax_state ?? null;
+
     const number = await nextNumber(c, providerId, 'quote');
     const { rows } = await c.query<{ id: string; created_at: string }>(
       `INSERT INTO quotes (provider_id, job_id, number, status, currency, subtotal_cents,
-                           discount_cents, tax_cents, total_cents, valid_until, notes, terms)
-       VALUES ($1,$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11)
+                           discount_cents, tax_cents, total_cents, valid_until, notes, terms,
+                           taxable_base_cents, untaxed_base_cents, tax_jurisdiction)
+       VALUES ($1,$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING id, created_at`,
       [providerId, input.jobId, number, input.currency ?? 'USD',
        totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents,
-       input.validUntil ?? null, input.notes ?? null, input.terms ?? null],
+       input.validUntil ?? null, input.notes ?? null, input.terms ?? null,
+       totals.taxableBaseCents, totals.untaxedBaseCents, jurisdiction],
     );
     const quoteId = rows[0].id;
 
     for (const [index, line] of totals.lines.entries()) {
       await c.query(
         `INSERT INTO quote_items (quote_id, description, quantity, unit_price_cents,
-                                  tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                                  tax_rate_bp, line_total_cents, sort_order,
+                                  tax_treatment, tax_reason, line_discount_cents,
+                                  line_taxable_base_cents, line_tax_cents)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [quoteId, line.description, line.quantity, line.unitPriceCents,
-         line.taxRateBp, line.lineTotalCents, index],
+         line.taxRateBp, line.lineTotalCents, index,
+         line.taxTreatment, line.taxReason ?? null, line.lineDiscountCents,
+         line.lineTaxableBaseCents, line.lineTaxCents],
       );
     }
 
@@ -110,16 +129,22 @@ export async function updateQuote(
       for (const [index, line] of totals.lines.entries()) {
         await c.query(
           `INSERT INTO quote_items (quote_id, description, quantity, unit_price_cents,
-                                    tax_rate_bp, line_total_cents, sort_order)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                                    tax_rate_bp, line_total_cents, sort_order,
+                                    tax_treatment, tax_reason, line_discount_cents,
+                                    line_taxable_base_cents, line_tax_cents)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
           [quoteId, line.description, line.quantity, line.unitPriceCents,
-           line.taxRateBp, line.lineTotalCents, index],
+           line.taxRateBp, line.lineTotalCents, index,
+           line.taxTreatment, line.taxReason ?? null, line.lineDiscountCents,
+           line.lineTaxableBaseCents, line.lineTaxCents],
         );
       }
       await c.query(
         `UPDATE quotes SET subtotal_cents = $2, discount_cents = $3, tax_cents = $4,
-                total_cents = $5, updated_at = now() WHERE id = $1`,
-        [quoteId, totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents],
+                total_cents = $5, taxable_base_cents = $6, untaxed_base_cents = $7,
+                updated_at = now() WHERE id = $1`,
+        [quoteId, totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents,
+         totals.taxableBaseCents, totals.untaxedBaseCents],
       );
     }
 

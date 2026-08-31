@@ -1,5 +1,5 @@
 import { getDb } from '../../db/index.js';
-import { computeTotals, type LineInput } from '../../lib/money.js';
+import { computeTotals, type LineInput, type TaxTreatment } from '../../lib/money.js';
 import { nextNumber } from '../../lib/numbering.js';
 import { conflict, notFound, badRequest } from '../../lib/errors.js';
 import { enqueue } from '../../lib/queue.js';
@@ -13,6 +13,8 @@ export interface InvoiceLineInput {
   quantity: number;
   unitPriceCents: number;
   taxRateBp: number;
+  taxTreatment?: TaxTreatment;
+  taxReason?: string | null;
 }
 
 export interface CreateInvoiceInput {
@@ -34,6 +36,8 @@ const toLineInputs = (lines: InvoiceLineInput[]): LineInput[] =>
     quantity: l.quantity,
     unitPriceCents: l.unitPriceCents,
     taxRateBp: l.taxRateBp,
+    taxTreatment: l.taxTreatment ?? 'taxable',
+    taxReason: l.taxReason ?? null,
   }));
 
 export async function createInvoice(
@@ -72,7 +76,10 @@ export async function createInvoice(
       if (existing.rows.length) throw conflict('An invoice already exists for that quote.');
 
       const items = await c.query<any>(
-        `SELECT description, quantity, unit_price_cents, tax_rate_bp
+        // The tax treatment and its reason travel with the line. Copying only
+        // the rate would silently re-tax a line the customer accepted as
+        // exempt, and lose the evidence for why it was not taxed.
+        `SELECT description, quantity, unit_price_cents, tax_rate_bp, tax_treatment, tax_reason
            FROM quote_items WHERE quote_id = $1 ORDER BY sort_order`,
         [input.fromQuoteId],
       );
@@ -81,6 +88,8 @@ export async function createInvoice(
         quantity: Number(i.quantity),
         unitPriceCents: i.unit_price_cents,
         taxRateBp: i.tax_rate_bp,
+        taxTreatment: i.tax_treatment as TaxTreatment,
+        taxReason: i.tax_reason,
       }));
       jobId = quote.job_id;
       clientId = quote.client_id;
@@ -105,28 +114,44 @@ export async function createInvoice(
     }
 
     const totals = computeTotals(toLineInputs(lines), discountCents);
+
+    // Snapshot, not a live lookup: an issued document keeps the jurisdiction
+    // it was priced under even if the provider later changes states.
+    const { rows: taxRows } = await c.query<{ tax_state: string | null }>(
+      'SELECT tax_state FROM providers WHERE id = $1',
+      [providerId],
+    );
+    const jurisdiction = taxRows[0]?.tax_state ?? null;
+
     const number = await nextNumber(c, providerId, 'invoice');
 
     const { rows } = await c.query<{ id: string; created_at: string }>(
       `INSERT INTO invoices (provider_id, job_id, quote_id, client_id, number, status, currency,
                              issue_date, due_date, subtotal_cents, discount_cents, tax_cents,
-                             total_cents, notes)
-       VALUES ($1,$2,$3,$4,$5,'draft',$6, COALESCE($7::date, CURRENT_DATE), $8,$9,$10,$11,$12,$13)
+                             total_cents, notes, taxable_base_cents, untaxed_base_cents,
+                             tax_jurisdiction)
+       VALUES ($1,$2,$3,$4,$5,'draft',$6, COALESCE($7::date, CURRENT_DATE),
+               $8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING id, created_at`,
       [providerId, jobId, quoteId, clientId, number, currency,
        input.issueDate ?? null, input.dueDate ?? null,
        totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents,
-       input.notes ?? null],
+       input.notes ?? null,
+       totals.taxableBaseCents, totals.untaxedBaseCents, jurisdiction],
     );
     const invoiceId = rows[0].id;
 
     for (const [index, line] of totals.lines.entries()) {
       await c.query(
         `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price_cents,
-                                    tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                                    tax_rate_bp, line_total_cents, sort_order,
+                                    tax_treatment, tax_reason, line_discount_cents,
+                                    line_taxable_base_cents, line_tax_cents)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [invoiceId, line.description, line.quantity, line.unitPriceCents,
-         line.taxRateBp, line.lineTotalCents, index],
+         line.taxRateBp, line.lineTotalCents, index,
+         line.taxTreatment, line.taxReason ?? null, line.lineDiscountCents,
+         line.lineTaxableBaseCents, line.lineTaxCents],
       );
     }
 
@@ -221,7 +246,9 @@ export async function getInvoice(invoiceId: string, viewer: { providerId?: strin
 
   const [items, payments] = await Promise.all([
     db.query<any>(
-      `SELECT description, quantity, unit_price_cents, tax_rate_bp, line_total_cents
+      `SELECT description, quantity, unit_price_cents, tax_rate_bp, line_total_cents,
+              tax_treatment, tax_reason, line_discount_cents, line_taxable_base_cents,
+              line_tax_cents
          FROM invoice_items WHERE invoice_id = $1 ORDER BY sort_order`,
       [invoiceId],
     ),
@@ -264,12 +291,22 @@ export async function getInvoice(invoiceId: string, viewer: { providerId?: strin
       phone: isOwner ? inv.client_phone : undefined,
       city: inv.client_city,
     },
+    taxableBaseCents: inv.taxable_base_cents,
+    untaxedBaseCents: inv.untaxed_base_cents,
+    taxJurisdiction: inv.tax_jurisdiction,
     lines: items.rows.map((i) => ({
       description: i.description,
       quantity: Number(i.quantity),
       unitPriceCents: i.unit_price_cents,
       taxRateBp: i.tax_rate_bp,
       lineTotalCents: i.line_total_cents,
+      taxTreatment: i.tax_treatment,
+      // Why no tax was charged travels to the customer's copy and the PDF:
+      // an unexplained untaxed line is what an audit asks about.
+      taxReason: i.tax_reason,
+      lineDiscountCents: i.line_discount_cents,
+      lineTaxableBaseCents: i.line_taxable_base_cents,
+      lineTaxCents: i.line_tax_cents,
     })),
     payments: payments.rows.map((p) => ({
       amountCents: p.amount_cents,

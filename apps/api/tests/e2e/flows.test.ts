@@ -326,8 +326,8 @@ describe('Flows 4 & 5 — quote creation, WhatsApp send, and acceptance', () => 
       .send({
         jobId,
         lines: [
-          { description: 'Valve replacement', quantity: 1, unitPriceCents: 12000, taxRateBp: 1800 },
-          { description: 'Labour', quantity: 1.5, unitPriceCents: 4500, taxRateBp: 1800 },
+          { description: 'Valve replacement', quantity: 1, unitPriceCents: 12000, taxRateBp: 825 },
+          { description: 'Labour', quantity: 1.5, unitPriceCents: 4500, taxRateBp: 825 },
         ],
         validUntil: '2026-12-31',
       })
@@ -335,8 +335,8 @@ describe('Flows 4 & 5 — quote creation, WhatsApp send, and acceptance', () => 
 
     expect(quote.body.number).toMatch(/^Q-\d{4}-\d{4}$/);
     expect(quote.body.subtotalCents).toBe(18750);
-    expect(quote.body.taxCents).toBe(3375);
-    expect(quote.body.totalCents).toBe(22125);
+    expect(quote.body.taxCents).toBe(1547);
+    expect(quote.body.totalCents).toBe(20297);
   });
 
   it('ignores a client-supplied total and recomputes from the line items', async () => {
@@ -363,7 +363,7 @@ describe('Flows 4 & 5 — quote creation, WhatsApp send, and acceptance', () => 
     const quote = await request(app)
       .post('/api/v1/quotes')
       .set(auth(provider.token))
-      .send({ jobId, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 20000, taxRateBp: 1800 }] })
+      .send({ jobId, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 20000, taxRateBp: 825 }] })
       .expect(201);
 
     await request(app)
@@ -534,7 +534,7 @@ describe('Flow 6 — job completion, invoicing and review', () => {
 
     const quote = await request(app)
       .post('/api/v1/quotes').set(auth(provider.token))
-      .send({ jobId, lines: [{ description: 'Valve replacement', quantity: 1, unitPriceCents: 12000, taxRateBp: 1800 }] })
+      .send({ jobId, lines: [{ description: 'Valve replacement', quantity: 1, unitPriceCents: 12000, taxRateBp: 825 }] })
       .expect(201);
     await request(app).post(`/api/v1/quotes/${quote.body.id}/send`).set(auth(provider.token)).expect(200);
     await request(app)
@@ -563,7 +563,7 @@ describe('Flow 6 — job completion, invoicing and review', () => {
 
     expect(invoice.body.number).toMatch(/^INV-\d{4}-\d{4}$/);
     // The invoice inherits the accepted quote's figures exactly.
-    expect(invoice.body.totalCents).toBe(14160);
+    expect(invoice.body.totalCents).toBe(12990);
 
     await request(app)
       .post(`/api/v1/invoices/${invoice.body.id}/send`)
@@ -579,7 +579,7 @@ describe('Flow 6 — job completion, invoicing and review', () => {
     const payment = await request(app)
       .post(`/api/v1/invoices/${invoice.body.id}/payments`)
       .set(auth(provider.token))
-      .send({ amountCents: 14160, method: 'transfer' })
+      .send({ amountCents: 12990, method: 'transfer' })
       .expect(200);
     expect(payment.body.status).toBe('paid');
     expect(payment.body.balanceCents).toBe(0);
@@ -628,11 +628,11 @@ describe('Flow 6 — job completion, invoicing and review', () => {
       .post(`/api/v1/invoices/${invoice.body.id}/payments`)
       .set(auth(provider.token)).send({ amountCents: 5000 }).expect(200);
     expect(partial.body.status).toBe('partially_paid');
-    expect(partial.body.balanceCents).toBe(9160);
+    expect(partial.body.balanceCents).toBe(7990);
 
     const final = await request(app)
       .post(`/api/v1/invoices/${invoice.body.id}/payments`)
-      .set(auth(provider.token)).send({ amountCents: 9160 }).expect(200);
+      .set(auth(provider.token)).send({ amountCents: 7990 }).expect(200);
     expect(final.body.status).toBe('paid');
   });
 

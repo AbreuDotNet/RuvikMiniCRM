@@ -15,9 +15,9 @@ describe('money: line calculation', () => {
   });
 
   it('applies tax in basis points', () => {
-    const line = computeLine({ description: 'x', quantity: 1, unitPriceCents: 10000, taxRateBp: 1800 });
-    expect(line.lineTaxCents).toBe(1800);
-    expect(line.lineTotalCents).toBe(11800);
+    const line = computeLine({ description: 'x', quantity: 1, unitPriceCents: 10000, taxRateBp: 825 });
+    expect(line.lineTaxCents).toBe(825);
+    expect(line.lineTotalCents).toBe(10825);
   });
 
   it('rounds half up rather than truncating, so cents are never lost', () => {
@@ -36,15 +36,15 @@ describe('money: line calculation', () => {
 
 describe('money: document totals', () => {
   const lines = [
-    { description: 'Part', quantity: 1, unitPriceCents: 12000, taxRateBp: 1800 },
-    { description: 'Labour', quantity: 2, unitPriceCents: 4500, taxRateBp: 1800 },
+    { description: 'Part', quantity: 1, unitPriceCents: 12000, taxRateBp: 825 },
+    { description: 'Labour', quantity: 2, unitPriceCents: 4500, taxRateBp: 825 },
   ];
 
   it('sums subtotal, tax and total', () => {
     const totals = computeTotals(lines);
     expect(totals.subtotalCents).toBe(21000);
-    expect(totals.taxCents).toBe(3780);
-    expect(totals.totalCents).toBe(24780);
+    expect(totals.taxCents).toBe(1733);
+    expect(totals.totalCents).toBe(22733);
   });
 
   it('reduces the taxable base proportionally when a discount applies', () => {
@@ -52,8 +52,8 @@ describe('money: document totals', () => {
     // money they did not pay.
     const totals = computeTotals(lines, 10500);
     expect(totals.discountCents).toBe(10500);
-    expect(totals.taxCents).toBe(1890);
-    expect(totals.totalCents).toBe(10500 - 0 + 1890);
+    expect(totals.taxCents).toBe(866);
+    expect(totals.totalCents).toBe(11366);
   });
 
   it('caps a discount at the subtotal so a total can never go negative', () => {
@@ -65,7 +65,7 @@ describe('money: document totals', () => {
   it('ignores a negative discount', () => {
     const totals = computeTotals(lines, -5000);
     expect(totals.discountCents).toBe(0);
-    expect(totals.totalCents).toBe(24780);
+    expect(totals.totalCents).toBe(22733);
   });
 
   it('returns zeroes for an empty document', () => {

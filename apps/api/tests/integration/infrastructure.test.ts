@@ -38,8 +38,8 @@ describe('PDF generation pipeline', () => {
       .send({
         jobId,
         lines: [
-          { description: 'Valve replacement', quantity: 1, unitPriceCents: 12000, taxRateBp: 1800 },
-          { description: 'Labour', quantity: 2.5, unitPriceCents: 4500, taxRateBp: 1800 },
+          { description: 'Valve replacement', quantity: 1, unitPriceCents: 12000, taxRateBp: 825 },
+          { description: 'Labour', quantity: 2.5, unitPriceCents: 4500, taxRateBp: 825 },
         ],
         notes: 'Thank you for your business.',
         terms: 'Valid for 14 days.',
@@ -107,7 +107,7 @@ describe('PDF generation pipeline', () => {
     const { provider, clientId } = await providerWithJob('pdfinv@test.local');
     const invoice = await request(app)
       .post('/api/v1/invoices').set(auth(provider.token))
-      .send({ clientId, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 25000, taxRateBp: 1800 }] })
+      .send({ clientId, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 25000, taxRateBp: 825 }] })
       .expect(201);
     await request(app).post(`/api/v1/invoices/${invoice.body.id}/send`).set(auth(provider.token)).expect(200);
     await drainQueue();
