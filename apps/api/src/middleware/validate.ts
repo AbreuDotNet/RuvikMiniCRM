@@ -65,10 +65,69 @@ export const passwordSchema = z
   .refine((p) => new Set(p).size > 4, 'That password is too repetitive.');
 
 /** E.164: leading +, country code, up to 15 digits total. */
+const E164 = /^\+[1-9]\d{7,14}$/;
+
+/**
+ * Country code assumed for a number typed without one. The launch market is
+ * the United States, and +1 also covers Canada, Puerto Rico and the Dominican
+ * Republic, which share the North American Numbering Plan.
+ */
+const NANP_COUNTRY_CODE = '1';
+
+/** NANP national number: neither the area code nor the exchange may start with 0 or 1. */
+const NANP_NATIONAL = /^[2-9]\d{2}[2-9]\d{6}$/;
+
+/**
+ * Accepts how people actually type phone numbers and stores E.164.
+ *
+ * Requiring the caller to type `+1` was a steady source of rejected forms for
+ * a number that was perfectly valid — the format is a storage concern, not
+ * something to make the user solve.
+ *
+ * Deliberately NANP-only. "Prepend the country code" is not a general rule:
+ * Spanish numbers are 9 digits, UK numbers carry a trunk 0 that has to be
+ * dropped first. Launching in another market needs its own branch here, not a
+ * different value in the constant above.
+ *
+ * A number that already starts with `+` is never re-homed — only stripped of
+ * formatting — so an international caller can always be explicit. Anything
+ * this cannot resolve is returned unchanged for the schema to reject, rather
+ * than guessed at.
+ */
+export function normalizePhone(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return trimmed;
+
+  // Explicit country code: keep it, drop spaces, dashes and parentheses.
+  if (trimmed.startsWith('+')) return `+${trimmed.slice(1).replace(/\D/g, '')}`;
+
+  const digits = trimmed.replace(/\D/g, '');
+
+  // 00 is the international access prefix across most of the world.
+  if (digits.startsWith('00') && digits.length > 2) return `+${digits.slice(2)}`;
+
+  // 1-809-555-1234 → +18095551234
+  if (
+    digits.length === 11 &&
+    digits.startsWith(NANP_COUNTRY_CODE) &&
+    NANP_NATIONAL.test(digits.slice(1))
+  ) {
+    return `+${digits}`;
+  }
+
+  // (809) 555-1234 → +18095551234
+  if (digits.length === 10 && NANP_NATIONAL.test(digits)) {
+    return `+${NANP_COUNTRY_CODE}${digits}`;
+  }
+
+  return trimmed;
+}
+
 export const phoneSchema = z
   .string()
   .trim()
-  .regex(/^\+[1-9]\d{7,14}$/, 'Use international format, e.g. +18095551234');
+  .transform(normalizePhone)
+  .refine((v) => E164.test(v), 'Enter a valid phone number, e.g. (809) 555-1234 or +18095551234');
 
 /**
  * Strips C0/C1 control characters. These would otherwise corrupt generated

@@ -288,8 +288,8 @@ function WhatsAppConsentModal({
         label="WhatsApp number"
         type="tel"
         inputMode="tel"
-        placeholder="+18095551234"
-        hint="Include your country code."
+        placeholder="(809) 555-1234"
+        hint="US numbers can skip the +1."
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
         autoFocus

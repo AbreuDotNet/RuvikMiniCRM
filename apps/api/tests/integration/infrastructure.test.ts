@@ -241,9 +241,17 @@ describe('WhatsApp consent lifecycle', () => {
       .send({ phone: '+18095551234', acknowledged: false }).expect(422);
   });
 
-  it('rejects a phone number that is not E.164', async () => {
+  it('rejects a phone number that cannot be resolved to E.164', async () => {
     const customer = await registerUser(app, { role: 'customer', email: 'badphone@test.local' });
-    for (const phone of ['8095551234', '+0123', 'not-a-phone', '+1809555123456789']) {
+    const invalid = [
+      '+0123',                // country code cannot start with 0
+      'not-a-phone',
+      '+1809555123456789',    // beyond E.164's 15 digits
+      '0123456789',           // NANP area codes never start with 0
+      '1123456789',           // nor with 1
+      '80955512',             // too short for any NANP number
+    ];
+    for (const phone of invalid) {
       await request(app)
         .post('/api/v1/account/whatsapp-consent').set(auth(customer.token))
         .send({ phone, acknowledged: true }).expect(422);

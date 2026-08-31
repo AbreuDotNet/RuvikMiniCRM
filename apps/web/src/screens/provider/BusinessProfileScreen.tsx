@@ -170,12 +170,12 @@ export function BusinessProfileScreen() {
         maxLength={2000}
       />
 
-      <TextField label="Phone" type="tel" placeholder="+18095551234" value={form.phone} onChange={update('phone')} />
+      <TextField label="Phone" type="tel" placeholder="(809) 555-1234" hint="US numbers can skip the +1." value={form.phone} onChange={update('phone')} />
       <TextField
         label="WhatsApp number"
         type="tel"
-        placeholder="+18095551234"
-        hint="Shown to customers as a contact option."
+        placeholder="(809) 555-1234"
+        hint="Shown to customers as a contact option. US numbers can skip the +1."
         value={form.whatsappPhone}
         onChange={update('whatsappPhone')}
       />

@@ -218,8 +218,8 @@ export function JobCreateScreen() {
           <TextField
             label="Phone"
             type="tel"
-            hint="International format, e.g. +18095551234"
-            placeholder="+18095551234"
+            hint="US numbers can skip the +1."
+            placeholder="(809) 555-1234"
             value={newClient.phone}
             error={errorFor('newClient.phone')}
             onChange={updateClient('phone')}

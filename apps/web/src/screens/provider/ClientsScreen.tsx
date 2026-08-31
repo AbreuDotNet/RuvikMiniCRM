@@ -166,7 +166,7 @@ function AddClientModal({
       {error && <p className="field__error mb-3" role="alert">{error}</p>}
 
       <TextField label="Full name" value={form.fullName} onChange={update('fullName')} required autoFocus />
-      <TextField label="Phone" type="tel" placeholder="+18095551234" hint="International format" value={form.phone} onChange={update('phone')} />
+      <TextField label="Phone" type="tel" placeholder="(809) 555-1234" hint="US numbers can skip the +1." value={form.phone} onChange={update('phone')} />
       <TextField label="Email" type="email" value={form.email} onChange={update('email')} />
       <TextField label="City" value={form.city} onChange={update('city')} />
 
