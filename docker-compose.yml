@@ -55,6 +55,13 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     command: ['node', 'apps/api/dist/workers/runner.js']
+    # The image's HEALTHCHECK probes /health over HTTP, which only the API
+    # serves. Inherited here it can never pass, so the container reported
+    # unhealthy forever and any orchestrator would restart it in a loop.
+    # Disabled rather than faked; a real liveness signal for the queue drainer
+    # is worth adding, but it needs a heartbeat the worker does not emit yet.
+    healthcheck:
+      disable: true
     environment:
       NODE_ENV: production
       DATABASE_URL: postgres://ruvik:ruvik_local_dev@postgres:5432/ruvik?sslmode=disable

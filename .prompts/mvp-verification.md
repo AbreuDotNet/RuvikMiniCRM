@@ -3,6 +3,9 @@
 ## Objetivo
 Verificar que la lógica de negocio, arquitectura y funcionalidades estén completas y alineadas con el diseño del MVP de Ruvik.
 
+> Conteos verificados el 2026-08-30 (`npm test` y las rutas de `apps/web/src/App.tsx`).
+> Al añadir tests o rutas, actualiza las secciones 4 y 8 o volverán a quedar obsoletas.
+
 ---
 
 ## 1. VERIFICACIÓN DE FUNCIONALIDADES CORE
@@ -86,11 +89,11 @@ Verificar que la lógica de negocio, arquitectura y funcionalidades estén compl
 
 ## 4. VERIFICACIÓN DE COBERTURA DE TESTS
 
-- [ ] 141 tests pasando
-- [ ] Tests unitarios para crypto, money, pagination, jobStatus
-- [ ] Tests de integración infraestructura
-- [ ] Tests E2E de flujos críticos
-- [ ] Tests de seguridad (autenticación, autorización, ataques)
+- [ ] 150 tests pasando en 8 ficheros
+- [ ] Tests unitarios (47): crypto 12, pagination 16, money 14, jobStatus 5
+- [ ] Tests de integración infraestructura (19)
+- [ ] Tests E2E de flujos críticos (33)
+- [ ] Tests de seguridad (51): authz 20, attacks 31
 - [ ] Cobertura de rutas de dinero
 - [ ] Cobertura de idempotencia
 - [ ] SLOs verificados con load test
@@ -152,13 +155,13 @@ Verificar que la lógica de negocio, arquitectura y funcionalidades estén compl
 - [ ] `npm install` completa sin errores
 - [ ] `npm run seed` genera dataset demo consistente
 - [ ] `npm run dev` levanta API :4000 y web :5173
-- [ ] `npm test` pasa 141 tests
+- [ ] `npm test` pasa 150 tests
 - [ ] `npm run typecheck` limpio ambos workspaces
 - [ ] `npm run test:security` pasa suites de seguridad
 - [ ] `npm audit` limpio ambos workspaces
 - [ ] `node loadtest/run.mjs` cumple SLOs
 - [ ] `docker compose up --build` levanta stack production
-- [ ] Web: 25 screens verificadas en 3 roles (customer, provider, admin)
+- [ ] Web: 33 rutas verificadas en 3 roles (customer 7, provider 13, compartidas 6, admin 5, auth 2)
 - [ ] Todas las características documentadas funcionan end-to-end
 
 ---

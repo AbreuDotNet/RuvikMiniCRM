@@ -17,6 +17,13 @@ RUN npm run build
 # Drop dev dependencies from the layer that ships.
 RUN npm prune --omit=dev
 
+# npm workspaces hoist every dependency to the root node_modules, so the
+# per-workspace directory is usually empty and prune removes it outright.
+# The runtime stage still COPYs it — for the case where a version conflict
+# does force a local install — and COPY fails on a missing source, so ensure
+# it exists. Without this the image build stops here.
+RUN mkdir -p /app/apps/api/node_modules
+
 # ---------------------------------------------------------------- runtime ---
 FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
