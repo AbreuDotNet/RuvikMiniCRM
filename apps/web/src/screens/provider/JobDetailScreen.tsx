@@ -68,7 +68,14 @@ export function JobDetailScreen() {
 
   const j = job.data;
   const acceptedQuote = j.quotes.find((q) => q.status === 'accepted');
-  const canInvoice = acceptedQuote && j.invoices.length === 0;
+  /**
+   * Mirrors the server's rule exactly: a voided invoice does not block a new
+   * one. Counting every invoice — as this used to — meant that once an invoice
+   * was voided the button never came back, even though the API would have
+   * accepted a replacement.
+   */
+  const liveInvoices = j.invoices.filter((i) => i.status !== 'void');
+  const canInvoice = acceptedQuote && liveInvoices.length === 0;
 
   return (
     <Shell title={j.reference} tabs={PROVIDER_TABS} back="/jobs">

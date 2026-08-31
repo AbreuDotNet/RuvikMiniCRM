@@ -4,7 +4,7 @@ import { Shell } from '../../components/Shell';
 import { PROVIDER_TABS } from '../../components/nav';
 import { Icon } from '../../components/Icon';
 import {
-  Button, StatusPill, SkeletonList, ErrorState, EmptyState, Banner, SelectField, TextField,
+  Button, StatusPill, Pill, SkeletonList, ErrorState, EmptyState, Banner, PickerField, TextField,
   LoadMore, RefreshBar,
 } from '../../components/ui';
 import { useApi, usePagedApi, type PagedResponse } from '../../lib/useApi';
@@ -183,6 +183,8 @@ interface QuoteOption {
   currency: string;
   clientName: string;
   job: { id: string; title: string };
+  /** The invoice already raised from this quote, if there is one. */
+  invoice: { id: string; number: string; status: string } | null;
 }
 
 export function InvoiceBuilderScreen() {
@@ -251,17 +253,28 @@ export function InvoiceBuilderScreen() {
 
           <div style={{ height: 'var(--s5)' }} />
 
-          <SelectField
+          <PickerField
             label="Accepted quote"
             value={quoteId}
-            onChange={(e) => setQuoteId(e.target.value)}
-            options={[
-              { value: '', label: 'Choose a quote…' },
-              ...quotes.data.data.map((quote) => ({
-                value: quote.id,
-                label: `${quote.number} · ${quote.clientName} · ${formatMoney(quote.totalCents, quote.currency)}`,
-              })),
-            ]}
+            placeholder="Choose a quote…"
+            searchPlaceholder="Search by number, client or job…"
+            emptyText="No accepted quotes to invoice."
+            onChange={setQuoteId}
+            options={quotes.data.data.map((quote) => ({
+              value: quote.id,
+              label: quote.number,
+              description: quote.job.title,
+              meta: quote.invoice
+                // Say which invoice, not just that one exists: the provider is
+                // usually looking for it rather than trying to raise another.
+                ? `${quote.clientName} · already invoiced as ${quote.invoice.number}`
+                : `${quote.clientName} · ${formatMoney(quote.totalCents, quote.currency)}`,
+              badge: quote.invoice
+                ? <Pill tone="neutral">Invoiced</Pill>
+                : <Pill tone="success">Ready</Pill>,
+              disabled: Boolean(quote.invoice),
+              keywords: quote.clientName,
+            }))}
           />
 
           <TextField

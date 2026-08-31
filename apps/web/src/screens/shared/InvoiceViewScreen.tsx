@@ -23,6 +23,9 @@ interface InvoiceDetail {
   discountCents: number;
   taxCents: number;
   totalCents: number;
+  taxableBaseCents: number;
+  untaxedBaseCents: number;
+  taxJurisdiction: string | null;
   amountPaidCents: number;
   balanceCents: number;
   notes: string | null;
@@ -95,6 +98,9 @@ export function InvoiceViewScreen() {
         discountCents={inv.discountCents}
         taxCents={inv.taxCents}
         totalCents={inv.totalCents}
+        taxableBaseCents={inv.taxableBaseCents}
+        untaxedBaseCents={inv.untaxedBaseCents}
+        taxJurisdiction={inv.taxJurisdiction}
         amountPaidCents={inv.amountPaidCents}
         notes={inv.notes}
         pdfUrl={inv.pdfUrl}

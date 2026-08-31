@@ -53,10 +53,21 @@ quotesRouter.get(
 
     const db = await getDb();
     const { rows } = await db.query<any>(
+      // The invoice already raised from this quote, if any. Matches the guard
+      // in the invoice service exactly — a voided invoice does not block a new
+      // one — so the list cannot offer a quote the server would then refuse.
       `SELECT q.id, q.created_at, q.number, q.status, q.total_cents, q.currency,
               q.valid_until, q.sent_at, q.accepted_at,
-              j.id AS job_id, j.title AS job_title, c.full_name AS client_name
+              j.id AS job_id, j.title AS job_title, c.full_name AS client_name,
+              inv.id AS invoice_id, inv.number AS invoice_number, inv.status AS invoice_status
          FROM quotes q
+         LEFT JOIN LATERAL (
+           SELECT i.id, i.number, i.status
+             FROM invoices i
+            WHERE i.quote_id = q.id AND i.status <> 'void'
+            ORDER BY i.created_at DESC
+            LIMIT 1
+         ) inv ON true
          JOIN jobs j ON j.id = q.job_id
          JOIN clients c ON c.id = j.client_id
         WHERE ${where.join(' AND ')}
@@ -71,6 +82,9 @@ quotesRouter.get(
         currency: q.currency, validUntil: q.valid_until, sentAt: q.sent_at,
         acceptedAt: q.accepted_at, createdAt: q.created_at,
         job: { id: q.job_id, title: q.job_title }, clientName: q.client_name,
+        invoice: q.invoice_id
+          ? { id: q.invoice_id, number: q.invoice_number, status: q.invoice_status }
+          : null,
       })),
       pagination: { nextCursor: page.nextCursor, hasMore: page.hasMore, limit: f.limit },
     });

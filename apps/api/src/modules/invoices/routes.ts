@@ -149,3 +149,25 @@ invoicesRouter.get(
     );
   }),
 );
+
+/**
+ * Voids an invoice, freeing its quote to be invoiced again.
+ *
+ * A reason is required: a cancelled financial document with no explanation is
+ * exactly what an audit stops on.
+ */
+invoicesRouter.post(
+  '/:id/void',
+  authenticate,
+  requireProvider,
+  limiters.financial,
+  idempotency('invoices.void'),
+  validate(z.object({ id: uuidSchema }), 'params'),
+  validate(z.object({ reason: safeText(300, 3) })),
+  asyncHandler(async (req, res) => {
+    const result = await svc.voidInvoice(
+      tenantId(req), req.params.id, req.auth!.userId, (req.body as { reason: string }).reason,
+    );
+    res.json({ ...result, message: 'Invoice voided.' });
+  }),
+);

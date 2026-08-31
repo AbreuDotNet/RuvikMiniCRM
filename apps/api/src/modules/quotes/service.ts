@@ -259,12 +259,20 @@ export async function getQuote(quoteId: string, viewer: { providerId?: string; u
             c.address_line AS client_address, c.city AS client_city,
             p.business_name, p.tagline, p.city AS provider_city, p.phone_e164 AS provider_phone,
             p.address_line AS provider_address,
-            f.storage_key AS pdf_key
+            f.storage_key AS pdf_key,
+            inv.id AS invoice_id, inv.number AS invoice_number, inv.status AS invoice_status
        FROM quotes q
        JOIN jobs j ON j.id = q.job_id
        JOIN clients c ON c.id = j.client_id
        JOIN providers p ON p.id = q.provider_id
        LEFT JOIN files f ON f.id = q.pdf_file_id
+       LEFT JOIN LATERAL (
+         SELECT i.id, i.number, i.status
+           FROM invoices i
+          WHERE i.quote_id = q.id AND i.status <> 'void'
+          ORDER BY i.created_at DESC
+          LIMIT 1
+       ) inv ON true
       WHERE q.id = $1`,
     [quoteId],
   );
@@ -280,7 +288,9 @@ export async function getQuote(quoteId: string, viewer: { providerId?: string; u
   if (!isOwner && q.status === 'draft') throw notFound('That quote was not found.');
 
   const items = await db.query<any>(
-    `SELECT description, quantity, unit_price_cents, tax_rate_bp, line_total_cents
+    `SELECT description, quantity, unit_price_cents, tax_rate_bp, line_total_cents,
+            tax_treatment, tax_reason, line_discount_cents, line_taxable_base_cents,
+            line_tax_cents
        FROM quote_items WHERE quote_id = $1 ORDER BY sort_order`,
     [quoteId],
   );
@@ -294,6 +304,14 @@ export async function getQuote(quoteId: string, viewer: { providerId?: string; u
     discountCents: q.discount_cents,
     taxCents: q.tax_cents,
     totalCents: q.total_cents,
+    taxableBaseCents: q.taxable_base_cents,
+    untaxedBaseCents: q.untaxed_base_cents,
+    taxJurisdiction: q.tax_jurisdiction,
+    // Present when this quote has already been invoiced, so the screen can
+    // point at the invoice instead of offering to raise a second one.
+    invoice: q.invoice_id
+      ? { id: q.invoice_id, number: q.invoice_number, status: q.invoice_status }
+      : null,
     validUntil: q.valid_until,
     notes: q.notes,
     terms: q.terms,
@@ -323,6 +341,13 @@ export async function getQuote(quoteId: string, viewer: { providerId?: string; u
       unitPriceCents: i.unit_price_cents,
       taxRateBp: i.tax_rate_bp,
       lineTotalCents: i.line_total_cents,
+      taxTreatment: i.tax_treatment,
+      // The customer sees the quote before accepting, so why a line carries no
+      // tax has to be visible here too — not only once it becomes an invoice.
+      taxReason: i.tax_reason,
+      lineDiscountCents: i.line_discount_cents,
+      lineTaxableBaseCents: i.line_taxable_base_cents,
+      lineTaxCents: i.line_tax_cents,
     })),
   };
 }

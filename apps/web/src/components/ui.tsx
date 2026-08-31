@@ -164,6 +164,12 @@ export interface PickerOption {
   badge?: ReactNode;
   /** Texto extra que participa en la busqueda sin mostrarse. */
   keywords?: string;
+  /**
+   * Visible pero no elegible. Se muestra en vez de ocultarse porque el usuario
+   * suele estar buscando precisamente esa opcion, y no encontrarla parece un
+   * fallo; verla atenuada con su motivo responde la pregunta.
+   */
+  disabled?: boolean;
 }
 
 interface PickerFieldProps {
@@ -281,8 +287,10 @@ export function PickerField({
                     type="button"
                     role="option"
                     aria-selected={isSelected}
-                    className={`picker-option${isSelected ? ' is-selected' : ''}`}
-                    onClick={() => choose(option.value)}
+                    aria-disabled={option.disabled || undefined}
+                    disabled={option.disabled}
+                    className={`picker-option${isSelected ? ' is-selected' : ''}${option.disabled ? ' is-disabled' : ''}`}
+                    onClick={() => { if (!option.disabled) choose(option.value); }}
                   >
                     <span className="picker-option__body">
                       <span className="picker-option__head">

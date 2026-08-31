@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Shell } from '../../components/Shell';
 import { CUSTOMER_TABS, PROVIDER_TABS } from '../../components/nav';
 import { Icon } from '../../components/Icon';
@@ -12,12 +12,24 @@ import { useAuth } from '../../state/auth';
 import { useToast } from '../../state/ui';
 import { formatMoney, formatDate } from '../../lib/format';
 
+/**
+ * Renders a rate without inventing or losing precision: 8.25% stays 8.25%,
+ * 7% does not become "7.00%".
+ */
+function formatRate(bp: number): string {
+  const pct = bp / 100;
+  return `${Number.isInteger(pct) ? pct : pct.toFixed(2).replace(/0$/, '')}%`;
+}
+
 export interface DocumentLine {
   description: string;
   quantity: number;
   unitPriceCents: number;
   taxRateBp: number;
   lineTotalCents: number;
+  taxTreatment?: 'taxable' | 'exempt' | 'not_subject';
+  /** Why no tax was charged; shown to the customer on the document. */
+  taxReason?: string | null;
 }
 
 interface QuoteDetail {
@@ -29,6 +41,11 @@ interface QuoteDetail {
   discountCents: number;
   taxCents: number;
   totalCents: number;
+  taxableBaseCents: number;
+  untaxedBaseCents: number;
+  taxJurisdiction: string | null;
+  /** Set when this quote has already been turned into an invoice. */
+  invoice: { id: string; number: string; status: string } | null;
   validUntil: string | null;
   notes: string | null;
   terms: string | null;
@@ -46,6 +63,7 @@ interface QuoteDetail {
 
 export function QuoteViewScreen() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { notify } = useToast();
   const [confirmAccept, setConfirmAccept] = useState(false);
@@ -108,6 +126,9 @@ export function QuoteViewScreen() {
         discountCents={q.discountCents}
         taxCents={q.taxCents}
         totalCents={q.totalCents}
+        taxableBaseCents={q.taxableBaseCents}
+        untaxedBaseCents={q.untaxedBaseCents}
+        taxJurisdiction={q.taxJurisdiction}
         notes={q.notes}
         terms={q.terms}
         pdfUrl={q.pdfUrl}
@@ -119,6 +140,31 @@ export function QuoteViewScreen() {
           <Banner tone="success" icon="check">
             Accepted on {formatDate(q.acceptedAt)}. The job is approved and ready to schedule.
           </Banner>
+        </div>
+      )}
+
+      {/* Only the provider raises invoices, and only one per quote. Showing the
+          existing one here is what stops a second attempt before it starts. */}
+      {user?.role === 'provider' && q.status === 'accepted' && (
+        <div className="mt-3">
+          {q.invoice ? (
+            <Button
+              block
+              variant="secondary"
+              icon="receipt"
+              onClick={() => navigate(`/invoices/${q.invoice!.id}`)}
+            >
+              Already invoiced as {q.invoice.number} — view it
+            </Button>
+          ) : (
+            <Button
+              block
+              icon="receipt"
+              onClick={() => navigate(`/invoices/new?quote=${q.id}`)}
+            >
+              Create invoice from this quote
+            </Button>
+          )}
         </div>
       )}
 
@@ -200,6 +246,9 @@ interface DocumentSheetProps {
   discountCents: number;
   taxCents: number;
   totalCents: number;
+  taxableBaseCents?: number;
+  untaxedBaseCents?: number;
+  taxJurisdiction?: string | null;
   amountPaidCents?: number;
   notes?: string | null;
   terms?: string | null;
@@ -253,8 +302,16 @@ export function DocumentSheet(props: DocumentSheetProps) {
                 <div className="doc-line__desc">{line.description}</div>
                 <div className="doc-line__meta">
                   {line.quantity} × {money(line.unitPriceCents)}
-                  {line.taxRateBp > 0 ? ` · ${(line.taxRateBp / 100).toFixed(0)}% tax` : ''}
+                  {/* Two decimals: most US combined rates are not whole numbers,
+                      and rounding 8.25% to "8%" understates it on a document
+                      the customer is asked to pay. */}
+                  {line.taxRateBp > 0 ? ` · ${formatRate(line.taxRateBp)} tax` : ''}
                 </div>
+                {line.taxTreatment && line.taxTreatment !== 'taxable' && line.taxReason && (
+                  <div className="doc-line__meta">
+                    {line.taxTreatment === 'exempt' ? 'Exempt' : 'No sales tax'} — {line.taxReason}
+                  </div>
+                )}
               </div>
               <div className="doc-line__amount">{money(line.lineTotalCents)}</div>
             </div>
@@ -270,11 +327,22 @@ export function DocumentSheet(props: DocumentSheetProps) {
               <span>Discount</span><span>− {money(props.discountCents)}</span>
             </div>
           )}
-          {props.taxCents > 0 && (
-            <div className="doc-total-row">
-              <span>Tax</span><span>{money(props.taxCents)}</span>
-            </div>
+          {/* When part of the document is untaxed, show what the tax was
+              charged on. Otherwise the customer has to reverse-engineer it. */}
+          {(props.untaxedBaseCents ?? 0) > 0 && typeof props.taxableBaseCents === 'number' && (
+            <>
+              <div className="doc-total-row">
+                <span>Taxable amount</span><span>{money(props.taxableBaseCents)}</span>
+              </div>
+              <div className="doc-total-row">
+                <span>Non-taxable amount</span><span>{money(props.untaxedBaseCents!)}</span>
+              </div>
+            </>
           )}
+          <div className="doc-total-row">
+            <span>Sales tax{props.taxJurisdiction ? ` (${props.taxJurisdiction})` : ''}</span>
+            <span>{props.taxCents > 0 ? money(props.taxCents) : 'None'}</span>
+          </div>
           <div className="doc-total-row doc-total-row--grand">
             <span>Total</span>
             <span className="doc-total-row__value">{money(props.totalCents)}</span>

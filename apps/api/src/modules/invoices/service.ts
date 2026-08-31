@@ -375,3 +375,56 @@ export async function recordPayment(
     };
   });
 }
+
+/**
+ * Voids an invoice.
+ *
+ * Voiding, not deleting: an issued invoice is a financial record, and the
+ * numbering sequence has to stay intact and gapless. The row keeps its number
+ * and turns into an explicit "this was cancelled", which is what an audit
+ * expects to find.
+ *
+ * An invoice with money against it cannot be voided. Once a customer has paid,
+ * the correction is a refund or a credit — voiding would leave a payment
+ * pointing at a document that claims it was never owed.
+ */
+export async function voidInvoice(
+  providerId: string,
+  invoiceId: string,
+  actorUserId: string,
+  reason: string,
+) {
+  const db = await getDb();
+
+  return db.tx(async (c) => {
+    const { rows } = await c.query<any>(
+      `SELECT id, number, status, amount_paid_cents, quote_id
+         FROM invoices WHERE id = $1 AND provider_id = $2 FOR UPDATE`,
+      [invoiceId, providerId],
+    );
+    const inv = rows[0];
+    if (!inv) throw notFound('That invoice was not found.');
+    if (inv.status === 'void') throw conflict('That invoice is already void.');
+    if (inv.amount_paid_cents > 0) {
+      throw conflict(
+        'This invoice has payments recorded against it. Refund or credit it instead of voiding.',
+      );
+    }
+
+    await c.query(
+      `UPDATE invoices SET status = 'void', voided_at = now(), updated_at = now()
+        WHERE id = $1`,
+      [invoiceId],
+    );
+
+    await writeAudit({
+      actorUserId, actorRole: 'provider', action: 'invoice.voided',
+      entityType: 'invoice', entityId: invoiceId,
+      metadata: { number: inv.number, previousStatus: inv.status, reason },
+    }, c);
+
+    // The quote it came from is free to be invoiced again — the same rule the
+    // creation guard applies, so the two cannot disagree.
+    return { id: invoiceId, status: 'void' as const, quoteId: inv.quote_id };
+  });
+}

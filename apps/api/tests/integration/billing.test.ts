@@ -304,3 +304,180 @@ describe('tax determination endpoint', () => {
     expect(res.body.lines[0].reason).toContain('ST-120-4417');
   });
 });
+
+describe('one invoice per quote', () => {
+  async function acceptedQuote(seed: string) {
+    const provider = await registerUser(app, {
+      role: 'provider', email: `${seed}@test.local`, businessName: `${seed} Co`,
+    });
+    await publishProvider(provider.providerId!);
+    const service = await request(app)
+      .post('/api/v1/provider/services').set(auth(provider.token))
+      .send({
+        categoryId, title: 'Repair work', shortDescription: 'Same-day repair',
+        pricingType: 'request_quote', estimatedDurationMin: 120, status: 'active',
+      })
+      .expect(201);
+    const customer = await registerUser(app, { role: 'customer', email: `${seed}cust@test.local` });
+    const job = await request(app)
+      .post('/api/v1/customer/requests').set(auth(customer.token))
+      .send({
+        providerId: provider.providerId, serviceId: service.body.id,
+        title: 'Repair work', description: 'Something needs fixing in the kitchen.',
+      })
+      .expect(201);
+
+    const quote = await request(app)
+      .post('/api/v1/quotes').set(auth(provider.token)).set('idempotency-key', `${seed}-q`)
+      .send({ jobId: job.body.id, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 50_000, taxRateBp: 0 }] })
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/quotes/${quote.body.id}/send`).set(auth(provider.token))
+      .set('idempotency-key', `${seed}-s`).expect(200);
+    await request(app)
+      .post(`/api/v1/quotes/${quote.body.id}/respond`).set(auth(customer.token))
+      .send({ decision: 'accept' }).expect(200);
+
+    return { provider, quoteId: quote.body.id as string, jobId: job.body.id as string };
+  }
+
+  it('reports no invoice on a quote that has not been invoiced', async () => {
+    const { provider, quoteId } = await acceptedQuote('noinv');
+    const list = await request(app)
+      .get('/api/v1/quotes').query({ status: 'accepted' }).set(auth(provider.token)).expect(200);
+    expect(list.body.data.find((q: any) => q.id === quoteId).invoice).toBeNull();
+
+    const detail = await request(app)
+      .get(`/api/v1/quotes/${quoteId}`).set(auth(provider.token)).expect(200);
+    expect(detail.body.invoice).toBeNull();
+  });
+
+  it('names the invoice on a quote already invoiced, in list and detail', async () => {
+    // This is what the picker reads to grey the quote out, so both paths matter.
+    const { provider, quoteId } = await acceptedQuote('hasinv');
+    const invoice = await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'hasinv-i')
+      .send({ fromQuoteId: quoteId }).expect(201);
+
+    const list = await request(app)
+      .get('/api/v1/quotes').query({ status: 'accepted' }).set(auth(provider.token)).expect(200);
+    const row = list.body.data.find((q: any) => q.id === quoteId);
+    expect(row.invoice).toMatchObject({ id: invoice.body.id, number: invoice.body.number });
+
+    const detail = await request(app)
+      .get(`/api/v1/quotes/${quoteId}`).set(auth(provider.token)).expect(200);
+    expect(detail.body.invoice.number).toBe(invoice.body.number);
+  });
+
+  it('refuses a second invoice for the same quote', async () => {
+    const { provider, quoteId } = await acceptedQuote('dupe');
+    await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'dupe-1')
+      .send({ fromQuoteId: quoteId }).expect(201);
+
+    const second = await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'dupe-2')
+      .send({ fromQuoteId: quoteId }).expect(409);
+    expect(second.body.error.message).toContain('already exists');
+  });
+
+  it('frees the quote again once the invoice is voided', async () => {
+    // The UI must agree with this: the job screen used to count voided
+    // invoices too, so the button never came back after a void.
+    const { provider, quoteId } = await acceptedQuote('voided');
+    const first = await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'void-1')
+      .send({ fromQuoteId: quoteId }).expect(201);
+    await request(app)
+      .post(`/api/v1/invoices/${first.body.id}/void`).set(auth(provider.token))
+      .send({ reason: 'Issued in error' }).expect(200);
+
+    const detail = await request(app)
+      .get(`/api/v1/quotes/${quoteId}`).set(auth(provider.token)).expect(200);
+    expect(detail.body.invoice).toBeNull();
+
+    await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'void-2')
+      .send({ fromQuoteId: quoteId }).expect(201);
+  });
+});
+
+describe('voiding an invoice', () => {
+  it('refuses to void one that has been paid', async () => {
+    // Voiding a paid invoice would leave a payment pointing at a document that
+    // says nothing was ever owed. The correction is a refund or a credit.
+    const { provider, jobId } = await providerWithJob('paidvoid@test.local');
+    const invoice = await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'pv-1')
+      .send({ jobId, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 20_000, taxRateBp: 0 }] })
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/invoices/${invoice.body.id}/send`).set(auth(provider.token))
+      .set('idempotency-key', 'pv-s').expect(200);
+    await request(app)
+      .post(`/api/v1/invoices/${invoice.body.id}/payments`).set(auth(provider.token))
+      .set('idempotency-key', 'pv-p').send({ amountCents: 20_000 }).expect(200);
+
+    const res = await request(app)
+      .post(`/api/v1/invoices/${invoice.body.id}/void`).set(auth(provider.token))
+      .set('idempotency-key', 'pv-v').send({ reason: 'Wrong client' }).expect(409);
+    expect(res.body.error.message).toContain('Refund');
+  });
+
+  it('requires a reason', async () => {
+    const { provider, jobId } = await providerWithJob('reasonvoid@test.local');
+    const invoice = await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'rv-1')
+      .send({ jobId, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 5_000, taxRateBp: 0 }] })
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/invoices/${invoice.body.id}/void`).set(auth(provider.token))
+      .set('idempotency-key', 'rv-v').send({}).expect(422);
+  });
+
+  it('keeps the number rather than deleting the record', async () => {
+    // The numbering sequence has to stay gapless: a void is a state, not a gap.
+    const { provider, jobId } = await providerWithJob('keepnum@test.local');
+    const invoice = await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'kn-1')
+      .send({ jobId, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 5_000, taxRateBp: 0 }] })
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/invoices/${invoice.body.id}/void`).set(auth(provider.token))
+      .set('idempotency-key', 'kn-v').send({ reason: 'Issued in error' }).expect(200);
+
+    const detail = await request(app)
+      .get(`/api/v1/invoices/${invoice.body.id}`).set(auth(provider.token)).expect(200);
+    expect(detail.body.status).toBe('void');
+    expect(detail.body.number).toBe(invoice.body.number);
+  });
+
+  it('will not void the same invoice twice', async () => {
+    const { provider, jobId } = await providerWithJob('twicevoid@test.local');
+    const invoice = await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'tv-1')
+      .send({ jobId, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 5_000, taxRateBp: 0 }] })
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/invoices/${invoice.body.id}/void`).set(auth(provider.token))
+      .set('idempotency-key', 'tv-a').send({ reason: 'Issued in error' }).expect(200);
+    await request(app)
+      .post(`/api/v1/invoices/${invoice.body.id}/void`).set(auth(provider.token))
+      .set('idempotency-key', 'tv-b').send({ reason: 'Again' }).expect(409);
+  });
+
+  it('does not let another provider void your invoice', async () => {
+    const { provider, jobId } = await providerWithJob('ownvoid@test.local');
+    const invoice = await request(app)
+      .post('/api/v1/invoices').set(auth(provider.token)).set('idempotency-key', 'ov-1')
+      .send({ jobId, lines: [{ description: 'Work', quantity: 1, unitPriceCents: 5_000, taxRateBp: 0 }] })
+      .expect(201);
+
+    const intruder = await registerUser(app, {
+      role: 'provider', email: 'intruder@test.local', businessName: 'Intruder Co',
+    });
+    await request(app)
+      .post(`/api/v1/invoices/${invoice.body.id}/void`).set(auth(intruder.token))
+      .set('idempotency-key', 'ov-x').send({ reason: 'Not mine' }).expect(404);
+  });
+});

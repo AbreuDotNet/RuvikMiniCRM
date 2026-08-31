@@ -796,7 +796,15 @@
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
-.picker-option:hover { border-color: var(--brand); background: var(--bg); }
+.picker-option:hover:not(:disabled) { border-color: var(--brand); background: var(--bg); }
+/* Atenuada pero legible: sigue siendo informacion, no ruido. */
+.picker-option.is-disabled {
+  cursor: not-allowed;
+  background: var(--bg);
+  border-style: dashed;
+}
+.picker-option.is-disabled .picker-option__label,
+.picker-option.is-disabled .picker-option__description { color: var(--text-muted); }
 .picker-option.is-selected {
   border-color: var(--brand);
   border-width: 2px;
