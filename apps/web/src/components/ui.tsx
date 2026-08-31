@@ -1,7 +1,7 @@
 import {
   type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes,
   type TextareaHTMLAttributes, type SelectHTMLAttributes,
-  useEffect, useId, useRef,
+  useEffect, useId, useRef, useMemo, useState,
 } from 'react';
 import { Icon, type IconName } from './Icon';
 import { statusLabel, statusTone, avatarColor, initials, type PillTone } from '../lib/format';
@@ -147,6 +147,162 @@ export function SelectField({ label, hint, error, options, ...rest }: SelectFiel
         </select>
       )}
     </FieldWrap>
+  );
+}
+
+/* -------------------------------------------------------------- picker --- */
+
+export interface PickerOption {
+  value: string;
+  /** Linea principal: lo que identifica la opcion (una referencia, un numero). */
+  label: string;
+  /** Linea secundaria: el titulo o la descripcion. */
+  description?: string;
+  /** Linea terciaria: a quien pertenece. */
+  meta?: string;
+  /** Se pinta a la derecha de la etiqueta (un estado, un importe). */
+  badge?: ReactNode;
+  /** Texto extra que participa en la busqueda sin mostrarse. */
+  keywords?: string;
+}
+
+interface PickerFieldProps {
+  label: string;
+  hint?: string;
+  error?: string;
+  value: string;
+  options: PickerOption[];
+  placeholder?: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  /** A partir de cuantas opciones aparece el buscador. */
+  searchThreshold?: number;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}
+
+/**
+ * Selector en hoja inferior, para listas donde un <select> nativo se queda
+ * corto.
+ *
+ * El picker del sistema aplasta cada opcion en una sola linea de texto plano,
+ * asi que "referencia · titulo · cliente" salia partido en dos renglones y sin
+ * jerarquia: con veinte trabajos habia que leerlos todos para encontrar uno.
+ * Aqui cada opcion tiene estructura propia, estado visible y buscador.
+ */
+export function PickerField({
+  label, hint, error, value, options, onChange,
+  placeholder = 'Choose…',
+  searchPlaceholder = 'Search…',
+  emptyText = 'Nothing to choose from yet.',
+  searchThreshold = 7,
+  disabled,
+}: PickerFieldProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const selected = options.find((o) => o.value === value);
+  const showSearch = options.length >= searchThreshold;
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) =>
+      [o.label, o.description, o.meta, o.keywords]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [options, query]);
+
+  const close = () => {
+    setOpen(false);
+    // La proxima apertura empieza limpia; un filtro heredado esconde opciones
+    // sin que se vea por que.
+    setQuery('');
+  };
+
+  const choose = (next: string) => {
+    onChange(next);
+    close();
+  };
+
+  return (
+    <div className="field">
+      <span className="field__label">{label}</span>
+      {hint && <span className="field__hint">{hint}</span>}
+
+      <button
+        type="button"
+        className="picker-trigger"
+        aria-haspopup="dialog"
+        aria-invalid={error ? true : undefined}
+        disabled={disabled || options.length === 0}
+        onClick={() => setOpen(true)}
+      >
+        <span className={`picker-trigger__value${selected ? '' : ' is-placeholder'}`}>
+          {selected
+            ? selected.label + (selected.description ? ` · ${selected.description}` : '')
+            : options.length === 0 ? emptyText : placeholder}
+        </span>
+        <Icon name="chevron" size={18} />
+      </button>
+
+      {error && (
+        <span className="field__error" role="alert">
+          <Icon name="alert" size={14} /> {error}
+        </span>
+      )}
+
+      <Modal open={open} title={label} onClose={close}>
+        {showSearch && (
+          <input
+            className="input picker-search"
+            type="search"
+            value={query}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        )}
+
+        {matches.length === 0 ? (
+          <p className="modal__body">
+            {options.length === 0 ? emptyText : `Nothing matches “${query.trim()}”.`}
+          </p>
+        ) : (
+          <ul className="picker-list" role="listbox" aria-label={label}>
+            {matches.map((option) => {
+              const isSelected = option.value === value;
+              return (
+                <li key={option.value}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={`picker-option${isSelected ? ' is-selected' : ''}`}
+                    onClick={() => choose(option.value)}
+                  >
+                    <span className="picker-option__body">
+                      <span className="picker-option__head">
+                        <span className="picker-option__label">{option.label}</span>
+                        {option.badge}
+                      </span>
+                      {option.description && (
+                        <span className="picker-option__description">{option.description}</span>
+                      )}
+                      {option.meta && <span className="picker-option__meta">{option.meta}</span>}
+                    </span>
+                    {isSelected && <Icon name="check" size={18} />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Modal>
+    </div>
   );
 }
 

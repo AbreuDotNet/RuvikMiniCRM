@@ -4,7 +4,7 @@ import { Shell } from '../../components/Shell';
 import { PROVIDER_TABS } from '../../components/nav';
 import { Icon } from '../../components/Icon';
 import {
-  Button, TextField, TextArea, SelectField, Banner, SkeletonList,
+  Button, TextField, TextArea, PickerField, StatusPill, Banner, SkeletonList,
 } from '../../components/ui';
 import { useApi } from '../../lib/useApi';
 import { api, ApiError, newIdempotencyKey } from '../../lib/api';
@@ -23,6 +23,8 @@ interface JobOption {
   id: string;
   reference: string;
   title: string;
+  status: string;
+  city: string | null;
   client: { fullName: string };
 }
 
@@ -152,18 +154,22 @@ export function QuoteBuilderScreen() {
       {jobs.loading ? (
         <SkeletonList rows={1} />
       ) : (
-        <SelectField
+        <PickerField
           label="Job"
           hint="The client and their details come from the job."
           value={jobId}
-          onChange={(e) => setJobId(e.target.value)}
-          options={[
-            { value: '', label: 'Choose a job…' },
-            ...(jobs.data?.data ?? []).map((job) => ({
-              value: job.id,
-              label: `${job.reference} · ${job.title} · ${job.client.fullName}`,
-            })),
-          ]}
+          placeholder="Choose a job…"
+          searchPlaceholder="Search by reference, job or client…"
+          emptyText="No jobs yet — create one first."
+          onChange={setJobId}
+          options={(jobs.data?.data ?? []).map((job) => ({
+            value: job.id,
+            label: job.reference,
+            description: job.title,
+            meta: job.city ? `${job.client.fullName} · ${job.city}` : job.client.fullName,
+            badge: <StatusPill status={job.status} />,
+            keywords: job.status,
+          }))}
         />
       )}
 

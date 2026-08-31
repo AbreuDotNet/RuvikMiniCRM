@@ -734,6 +734,100 @@
 .modal__actions { display: flex; gap: var(--s3); }
 .modal__actions .btn { flex: 1; }
 
+/* -------------------------------------------------------------- picker --- */
+
+.picker-trigger {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+.picker-trigger:hover:not(:disabled) { border-color: var(--brand); }
+.picker-trigger:disabled { opacity: 0.6; cursor: not-allowed; }
+.picker-trigger[aria-invalid='true'] { border-color: var(--danger); border-width: 2px; }
+.picker-trigger__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-trigger__value.is-placeholder { color: var(--text-subtle); }
+
+/* Pegado arriba para que el filtro siga a mano al desplazar una lista larga. */
+.picker-search {
+  position: sticky;
+  top: calc(var(--s5) * -1);
+  z-index: 1;
+  margin-bottom: var(--s3);
+}
+
+.picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.picker-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.picker-option:hover { border-color: var(--brand); background: var(--bg); }
+.picker-option.is-selected {
+  border-color: var(--brand);
+  border-width: 2px;
+  /* El borde de 2px comeria un pixel de alto: compensa en el padding. */
+  padding: calc(var(--s3) - 1px) calc(var(--s4) - 1px);
+  background: var(--brand-soft);
+}
+
+.picker-option__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.picker-option__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+.picker-option__label { font-weight: 650; font-size: 0.9rem; }
+.picker-option__description {
+  font-size: 0.9rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-option__meta { font-size: 0.82rem; color: var(--text-muted); }
+
 /* Resumen de campos a corregir dentro del dialogo. */
 .issue-list {
   list-style: none;
