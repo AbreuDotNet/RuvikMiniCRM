@@ -245,3 +245,62 @@ describe('totals are server-side', () => {
     expect(quote.body.totalCents).toBe(2165);
   });
 });
+
+describe('tax determination endpoint', () => {
+  it('suggests without asserting authority', async () => {
+    const { provider } = await providerWithJob('determine@test.local');
+    await request(app)
+      .patch('/api/v1/provider/tax-settings').set(auth(provider.token))
+      .send({ taxState: 'TX', defaultTaxRateBp: 825 }).expect(200);
+
+    const res = await request(app)
+      .post('/api/v1/provider/tax-determination').set(auth(provider.token))
+      .send({
+        propertyKind: 'residential_real',
+        lines: [
+          { ref: 'm', kind: 'materials', amountCents: 40_000 },
+          { ref: 'l', kind: 'labour', amountCents: 60_000 },
+        ],
+      })
+      .expect(200);
+
+    // The product must never present its own guess as a determination.
+    expect(res.body.authoritative).toBe(false);
+    expect(res.body.disclaimer).toContain('CPA');
+    expect(res.body.jurisdiction).toBe('TX');
+    expect(res.body.lines.find((l: any) => l.ref === 'm').rateBp).toBe(825);
+  });
+
+  it('warns when the work is in another state', async () => {
+    const { provider } = await providerWithJob('crossstate@test.local');
+    await request(app)
+      .patch('/api/v1/provider/tax-settings').set(auth(provider.token))
+      .send({ taxState: 'TX', defaultTaxRateBp: 825 }).expect(200);
+
+    const res = await request(app)
+      .post('/api/v1/provider/tax-determination').set(auth(provider.token))
+      .send({
+        destinationState: 'NM',
+        lines: [{ ref: 'a', kind: 'materials', amountCents: 10_000 }],
+      })
+      .expect(200);
+    expect(res.body.warnings.join(' ')).toContain('NM');
+  });
+
+  it('relieves the lines when an exemption certificate is supplied', async () => {
+    const { provider } = await providerWithJob('cert@test.local');
+    await request(app)
+      .patch('/api/v1/provider/tax-settings').set(auth(provider.token))
+      .send({ taxState: 'NY', defaultTaxRateBp: 888 }).expect(200);
+
+    const res = await request(app)
+      .post('/api/v1/provider/tax-determination').set(auth(provider.token))
+      .send({
+        exemptionCertificateId: 'ST-120-4417',
+        lines: [{ ref: 'a', kind: 'materials', amountCents: 10_000 }],
+      })
+      .expect(200);
+    expect(res.body.lines[0].treatment).toBe('exempt');
+    expect(res.body.lines[0].reason).toContain('ST-120-4417');
+  });
+});

@@ -11,6 +11,7 @@ import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { writeAudit } from '../../lib/audit.js';
 import { signStorageUrl } from '../../lib/storage.js';
 import { paginationSchema, decodeCursor, buildPage } from '../../lib/pagination.js';
+import { taxProviderFor, type LineKind } from '../../lib/tax/provider.js';
 
 export const providerRouter = Router();
 providerRouter.use(authenticate, requireProvider);
@@ -146,6 +147,75 @@ providerRouter.patch(
       taxState: rows[0].tax_state,
       defaultTaxRateBp: rows[0].default_tax_rate_bp,
       jurisdictionNote: rows[0].tax_jurisdiction_note,
+    });
+  }),
+);
+
+/**
+ * Suggests a tax treatment for a set of lines.
+ *
+ * A suggestion, never an application: the response is advisory and the
+ * provider still sends the treatment they chose when they save the document.
+ * `authoritative` says whether the source could stand behind the figures —
+ * today it is the provider's own configured rate, so it is false.
+ */
+providerRouter.post(
+  '/tax-determination',
+  validate(
+    z.object({
+      destinationState: usStateSchema.optional(),
+      propertyKind: z.enum(['residential_real', 'commercial_real', 'personal_property', 'none'])
+        .default('residential_real'),
+      exemptionCertificateId: safeText(60).optional().nullable(),
+      lines: z.array(z.object({
+        ref: safeText(60, 1),
+        kind: z.enum(['materials', 'labour', 'equipment', 'fee', 'discount', 'other']),
+        amountCents: moneyCents,
+      })).min(1).max(100),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const input = req.body as {
+      destinationState?: string;
+      propertyKind: 'residential_real' | 'commercial_real' | 'personal_property' | 'none';
+      exemptionCertificateId?: string | null;
+      lines: Array<{ ref: string; kind: LineKind; amountCents: number }>;
+    };
+
+    const db = await getDb();
+    const { rows } = await db.query<any>(
+      'SELECT tax_state, default_tax_rate_bp FROM providers WHERE id = $1',
+      [tenantId(req)],
+    );
+    if (!rows.length) throw notFound('Provider profile not found.');
+
+    const state: string | null = rows[0].tax_state;
+    const provider = taxProviderFor({
+      rateBp: rows[0].default_tax_rate_bp,
+      state,
+      /**
+       * Whether labour is taxable is a state rule this app does not hold. It
+       * assumes taxable — the safer default, since under-charging leaves the
+       * seller owing the tax — and the provider can mark a line otherwise
+       * with a reason.
+       */
+      labourTaxable: true,
+    });
+
+    const determination = await provider.determine({
+      origin: { state: state ?? '' },
+      destination: { state: input.destinationState ?? state ?? '' },
+      propertyKind: input.propertyKind,
+      exemptionCertificateId: input.exemptionCertificateId ?? null,
+      lines: input.lines,
+    });
+
+    res.json({
+      ...determination,
+      // Said plainly rather than buried in terms: this is not tax advice.
+      disclaimer:
+        'Suggested from the rate you configured. Taxability depends on your state, the type of ' +
+        'work and the property — confirm with your state tax authority or a CPA.',
     });
   }),
 );

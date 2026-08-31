@@ -84,3 +84,21 @@ UPDATE invoice_items
 
 UPDATE quotes   SET taxable_base_cents = greatest(subtotal_cents - discount_cents, 0);
 UPDATE invoices SET taxable_base_cents = greatest(subtotal_cents - discount_cents, 0);
+
+-- ------------------------------------------------- service address state ---
+-- Clients and jobs carried a street and a city but no state or ZIP. For US
+-- sales tax that is not enough: many states source the tax to where the work
+-- is performed or delivered, so the jurisdiction of a job cannot be derived
+-- from a city name alone (there are Portlands in Oregon and in Maine, taxed
+-- very differently).
+--
+-- These stay nullable. A missing state is an honest "not recorded", which is
+-- better than defaulting to the provider's own and quietly asserting a
+-- jurisdiction nobody chose.
+ALTER TABLE clients
+  ADD COLUMN region text,
+  ADD COLUMN postal_code text;
+
+ALTER TABLE jobs
+  ADD COLUMN region text,
+  ADD COLUMN postal_code text;

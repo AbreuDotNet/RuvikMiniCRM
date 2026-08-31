@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { getDb } from './index.js';
 import { runMigrations } from './migrate.js';
 import { hashPassword } from '../lib/crypto.js';
-import { computeTotals } from '../lib/money.js';
+import { computeTotals, type LineInput } from '../lib/money.js';
 import { nextNumber } from '../lib/numbering.js';
 import { slugify } from '../lib/slug.js';
 import { logger } from '../lib/logger.js';
@@ -53,8 +53,22 @@ interface ProviderSeed {
   tagline: string;
   bio: string;
   city: string;
+  state: string;
+  postalCode: string;
+  addressLine: string;
   phone: string;
   category: string;
+  /** Combined state + local rate in basis points at the time of seeding. */
+  taxRateBp: number;
+  /** Where that rate comes from and how the state treats this trade. */
+  taxNote: string;
+  /**
+   * Whether labour on residential real property falls within the sales tax's
+   * scope in this state. Texas taxes the materials but not the labour; New
+   * York taxes both. This is what makes the seeded documents differ from each
+   * other rather than all carrying one invented national rate.
+   */
+  labourTaxable: boolean;
   years: number;
   verified: boolean;
   plan: string;
@@ -69,8 +83,11 @@ const PROVIDERS: ProviderSeed[] = [
   {
     email: 'greenleaf@ruvik.demo', fullName: 'Miguel Santana', businessName: 'Greenleaf Plumbing',
     tagline: 'Licensed & insured — same-day emergency service',
-    bio: 'Family-run plumbing shop serving Santo Domingo since 2013. We handle everything from a dripping tap to a full repipe, and we always quote before we start.',
-    city: 'Santo Domingo', phone: '+18095550111', category: 'plumbing', years: 12, verified: true, plan: 'pro',
+    bio: 'Family-run plumbing shop serving Austin since 2013. We handle everything from a dripping tap to a full repipe, and we always quote before we start.',
+    city: 'Austin', state: 'TX', postalCode: '78704',
+    addressLine: '1120 South Lamar Boulevard', phone: '+15125550111',
+    taxRateBp: 825, labourTaxable: false,
+    taxNote: 'Texas 6.25% state plus 2% Austin local. Labour on residential real property is outside the tax; materials are taxable.', category: 'plumbing', years: 12, verified: true, plan: 'pro',
     services: [
       { title: 'Toilet repair & valve replacement', short: 'Running or leaking toilet fixed same day', description: 'Diagnosis, flush valve or fill valve replacement, seal check and clean-up. Parts for standard models included.', pricing: 'fixed', price: 12000, duration: 90 },
       { title: 'Water heater installation', short: 'Supply and fit electric or gas units', description: 'Removal of the old unit, fitting, pressure testing and commissioning. Price varies with unit size and pipework.', pricing: 'starting_at', price: 30000, duration: 240 },
@@ -80,8 +97,11 @@ const PROVIDERS: ProviderSeed[] = [
   {
     email: 'sparktech@ruvik.demo', fullName: 'Carla Peña', businessName: 'Spark Tech Electric',
     tagline: 'Certified electricians — panels, wiring and safety checks',
-    bio: 'We specialise in residential rewiring and panel upgrades. Every job ends with a written safety certificate.',
-    city: 'Santiago', phone: '+18095550222', category: 'electrical', years: 9, verified: true, plan: 'pro',
+    bio: 'Brooklyn-based, we specialise in residential rewiring and panel upgrades. Every job ends with a written safety certificate.',
+    city: 'Brooklyn', state: 'NY', postalCode: '11215',
+    addressLine: '338 Fifth Avenue', phone: '+17185550222',
+    taxRateBp: 888, labourTaxable: true,
+    taxNote: 'New York 4% state plus 4.875% New York City. Repair, maintenance and installation to real property: labour and materials are both taxable.', category: 'electrical', years: 9, verified: true, plan: 'pro',
     services: [
       { title: 'Electrical panel upgrade', short: 'Modern breaker panel, safely installed', description: 'Load assessment, panel replacement, labelling and certification. Includes permit paperwork.', pricing: 'starting_at', price: 45000, duration: 360 },
       { title: 'Outlet & switch installation', short: 'Add or replace points around the house', description: 'Per-point pricing for new outlets, switches and dimmers on existing circuits.', pricing: 'fixed', price: 3500, duration: 45 },
@@ -91,8 +111,11 @@ const PROVIDERS: ProviderSeed[] = [
   {
     email: 'nordic@ruvik.demo', fullName: 'Elena Rosario', businessName: 'Nordic Wood Carpentry',
     tagline: 'Custom furniture and fitted joinery',
-    bio: 'Small workshop making built-in wardrobes, kitchen cabinetry and hardwood doors to measure. We survey first, then quote.',
-    city: 'Santo Domingo', phone: '+18095550333', category: 'carpentry', years: 15, verified: true, plan: 'business',
+    bio: 'Portland workshop making built-in closets, kitchen cabinetry and hardwood doors to measure. We survey first, then quote.',
+    city: 'Portland', state: 'OR', postalCode: '97214',
+    addressLine: '2215 Southeast Hawthorne Boulevard', phone: '+15035550333',
+    taxRateBp: 0, labourTaxable: false,
+    taxNote: 'Oregon levies no general sales tax, so nothing is charged on these documents.', category: 'carpentry', years: 15, verified: true, plan: 'business',
     services: [
       { title: 'Fitted wardrobe (made to measure)', short: 'Designed, built and installed', description: 'Survey, 3D drawing, build in our workshop and installation. Priced per linear metre of finished unit.', pricing: 'request_quote', duration: 2400 },
       { title: 'Interior door hanging', short: 'Supply and hang, per door', description: 'Includes frame adjustment, hinges, handle fitting and finishing.', pricing: 'fixed', price: 7500, duration: 120 },
@@ -102,8 +125,11 @@ const PROVIDERS: ProviderSeed[] = [
   {
     email: 'coolbreeze@ruvik.demo', fullName: 'Rafael Núñez', businessName: 'Cool Breeze HVAC',
     tagline: 'Air conditioning specialists — install, service, repair',
-    bio: 'Split systems, ducted units and commercial rooftops. Maintenance plans available for offices and rentals.',
-    city: 'Punta Cana', phone: '+18095550444', category: 'hvac', years: 7, verified: false, plan: 'starter',
+    bio: 'Phoenix valley-wide: split systems, ducted units and commercial rooftops. Maintenance plans available for offices and rentals.',
+    city: 'Phoenix', state: 'AZ', postalCode: '85016',
+    addressLine: '3402 East Camelback Road', phone: '+16025550444',
+    taxRateBp: 860, labourTaxable: true,
+    taxNote: 'Arizona transaction privilege tax, 5.6% state plus Phoenix local. Contracting is taxed under its own classification — confirm with a CPA.', category: 'hvac', years: 7, verified: false, plan: 'starter',
     services: [
       { title: 'Split AC service & deep clean', short: 'Restore cooling and cut running costs', description: 'Coil clean, filter replacement, gas pressure check and drainage clear-out.', pricing: 'fixed', price: 6500, duration: 90 },
       { title: 'Split AC installation', short: 'Supply and install, 12,000–24,000 BTU', description: 'Wall bracket, piping up to 3m, vacuum and commissioning. Unit supplied or bring your own.', pricing: 'starting_at', price: 28000, duration: 300 },
@@ -113,8 +139,11 @@ const PROVIDERS: ProviderSeed[] = [
   {
     email: 'brightcoat@ruvik.demo', fullName: 'Luis Fermín', businessName: 'Bright Coat Painting',
     tagline: 'Clean lines, tidy crews, on schedule',
-    bio: 'Interior and exterior painting for homes and small commercial spaces. We protect, prep properly and clean up.',
-    city: 'Santo Domingo', phone: '+18095550555', category: 'painting', years: 6, verified: false, plan: 'starter',
+    bio: 'Interior and exterior painting across Miami-Dade for homes and small commercial spaces. We protect, prep properly and clean up.',
+    city: 'Miami', state: 'FL', postalCode: '33130',
+    addressLine: '1035 Southwest 8th Street', phone: '+13055550555',
+    taxRateBp: 700, labourTaxable: true,
+    taxNote: 'Florida 6% state plus 1% Miami-Dade discretionary surtax.', category: 'painting', years: 6, verified: false, plan: 'starter',
     services: [
       { title: 'Interior room repaint', short: 'Walls and ceiling, two coats', description: 'Filling, sanding, masking and two coats of premium emulsion. Priced per standard room.', pricing: 'starting_at', price: 14000, duration: 480 },
       { title: 'Exterior facade painting', short: 'Weatherproof finish for the whole house', description: 'Pressure wash, crack repair, primer and two coats of exterior-grade paint.', pricing: 'request_quote', duration: 2880 },
@@ -122,12 +151,72 @@ const PROVIDERS: ProviderSeed[] = [
   },
 ];
 
+/** Area codes match the city, so the demo data survives a glance. */
 const CUSTOMERS = [
-  { email: 'ana@ruvik.demo',    fullName: 'Ana Reyes',        city: 'Santo Domingo', phone: '+18095551001' },
-  { email: 'pedro@ruvik.demo',  fullName: 'Pedro Martínez',   city: 'Santiago',      phone: '+18095551002' },
-  { email: 'lucia@ruvik.demo',  fullName: 'Lucía Guzmán',     city: 'Santo Domingo', phone: '+18095551003' },
-  { email: 'diego@ruvik.demo',  fullName: 'Diego Fernández',  city: 'Punta Cana',    phone: '+18095551004' },
+  { email: 'ana@ruvik.demo',   fullName: 'Ana Reyes',       city: 'Austin',   state: 'TX', postalCode: '78702', addressLine: '2405 East 6th Street',        phone: '+15125551001' },
+  { email: 'pedro@ruvik.demo', fullName: 'Pedro Martinez',  city: 'Brooklyn', state: 'NY', postalCode: '11238', addressLine: '590 Vanderbilt Avenue',       phone: '+17185551002' },
+  { email: 'lucia@ruvik.demo', fullName: 'Lucia Guzman',    city: 'Austin',   state: 'TX', postalCode: '78745', addressLine: '4710 South Congress Avenue',  phone: '+15125551003' },
+  { email: 'diego@ruvik.demo', fullName: 'Diego Fernandez', city: 'Phoenix',  state: 'AZ', postalCode: '85018', addressLine: '4225 East Indian School Road', phone: '+16025551004' },
 ];
+
+/**
+ * Splits one job into the two lines a US trade invoice actually carries, and
+ * applies the state's treatment to each.
+ *
+ * The split matters because several states tax them differently: in Texas the
+ * materials on a residential job are taxable while the labour is outside the
+ * tax altogether, so a single blended line could not represent the document
+ * honestly. Roughly 55/45 materials to labour — demo figures, not a pricing
+ * model.
+ */
+function documentLines(
+  title: string,
+  cents: number,
+  profile: { taxRateBp: number; labourTaxable: boolean; state: string },
+): LineInput[] {
+  const materials = Math.round(cents * 0.55);
+  const labour = cents - materials;
+  return [
+    {
+      description: `${title} — parts and materials`,
+      quantity: 1,
+      unitPriceCents: materials,
+      taxRateBp: profile.taxRateBp,
+      taxTreatment: 'taxable',
+    },
+    {
+      description: `${title} — labour`,
+      quantity: 1,
+      unitPriceCents: labour,
+      taxRateBp: profile.taxRateBp,
+      taxTreatment: profile.labourTaxable ? 'taxable' : 'not_subject',
+      taxReason: profile.labourTaxable
+        ? null
+        : `Labour on residential real property is not subject to sales tax in ${profile.state}`,
+    },
+  ];
+}
+
+/** Writes every line of a document with its allocated discount and tax base. */
+async function insertLines(
+  c: any,
+  table: 'quote_items' | 'invoice_items',
+  fk: 'quote_id' | 'invoice_id',
+  documentId: string,
+  totals: ReturnType<typeof computeTotals>,
+): Promise<void> {
+  for (const [index, line] of totals.lines.entries()) {
+    await c.query(
+      `INSERT INTO ${table} (${fk}, description, quantity, unit_price_cents, tax_rate_bp,
+                             line_total_cents, sort_order, tax_treatment, tax_reason,
+                             line_discount_cents, line_taxable_base_cents, line_tax_cents)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [documentId, line.description, line.quantity, line.unitPriceCents, line.appliedTaxRateBp,
+       line.lineTotalCents, index, line.taxTreatment, line.taxReason ?? null,
+       line.lineDiscountCents, line.lineTaxableBaseCents, line.lineTaxCents],
+    );
+  }
+}
 
 export async function seed(): Promise<void> {
   await runMigrations();
@@ -210,13 +299,16 @@ export async function seed(): Promise<void> {
 
     const { rows: provRows } = await db.query<{ id: string }>(
       `INSERT INTO providers (user_id, business_name, slug, tagline, bio, phone_e164,
-                              whatsapp_phone_e164, city, country, years_experience,
+                              whatsapp_phone_e164, address_line, city, region, postal_code,
+                              country, years_experience,
                               verification_status, verified_at, is_published, working_hours,
-                              certifications)
-       VALUES ($1,$2,$3,$4,$5,$6,$6,$7,'DO',$8,$9,
-               CASE WHEN $9 = 'verified' THEN now() ELSE NULL END, true, $10, $11)
+                              certifications, tax_state, default_tax_rate_bp, tax_jurisdiction_note)
+       VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10,'US',$11,$12,
+               CASE WHEN $12 = 'verified' THEN now() ELSE NULL END, true, $13, $14,
+               $9, $15, $16)
        RETURNING id`,
-      [userId, p.businessName, slugify(p.businessName), p.tagline, p.bio, p.phone, p.city, p.years,
+      [userId, p.businessName, slugify(p.businessName), p.tagline, p.bio, p.phone,
+       p.addressLine, p.city, p.state, p.postalCode, p.years,
        p.verified ? 'verified' : 'pending',
        JSON.stringify({
          mon: { open: '08:00', close: '17:00' }, tue: { open: '08:00', close: '17:00' },
@@ -224,7 +316,8 @@ export async function seed(): Promise<void> {
          fri: { open: '08:00', close: '17:00' }, sat: { open: '09:00', close: '13:00' },
          sun: { open: '00:00', close: '00:00', closed: true },
        }),
-       JSON.stringify(p.verified ? ['Licensed contractor', 'Public liability insured'] : [])],
+       JSON.stringify(p.verified ? ['Licensed contractor', 'Liability insured'] : []),
+       p.taxRateBp, p.taxNote],
     );
     const providerId = provRows[0].id;
     providerIds.set(p.email, providerId);
@@ -264,12 +357,15 @@ export async function seed(): Promise<void> {
   // 1. Completed plumbing job with an accepted quote, a paid invoice and a review.
   await buildJourney(db, {
     providerId: plumbing, customerUserId: ana, customerName: 'Ana Reyes',
-    email: 'ana@ruvik.demo', phone: '+18095551001', city: 'Santo Domingo',
+    email: 'ana@ruvik.demo', phone: '+15125551001',
+    addressLine: '2405 East 6th Street', city: 'Austin', state: 'TX', postalCode: '78702',
+    taxJurisdiction: 'TX',
     title: 'Master bathroom toilet running constantly',
     description: 'The toilet in the main bathroom keeps running after flushing and the water bill has jumped.',
+    // Texas: the parts are taxable, the labour on residential real property is not.
     lines: [
-      { description: 'Toilet repair — full valve replacement', quantity: 1, unitPriceCents: 12000, taxRateBp: 825 },
-      { description: 'Labour (hours)', quantity: 1.5, unitPriceCents: 4500, taxRateBp: 825 },
+      { description: 'Toilet valve assembly and seal kit', quantity: 1, unitPriceCents: 12000, taxRateBp: 825, taxTreatment: 'taxable' },
+      { description: 'Labour (hours)', quantity: 1.5, unitPriceCents: 4500, taxRateBp: 825, taxTreatment: 'not_subject', taxReason: 'Labour on residential real property is not subject to sales tax in TX' },
     ],
     outcome: 'completed_paid_reviewed',
     rating: 5,
@@ -278,34 +374,43 @@ export async function seed(): Promise<void> {
 
   // 2. Electrical job: quote sent, awaiting the customer's decision.
   await buildJourney(db, {
-    providerId: electric, customerUserId: pedro, customerName: 'Pedro Martínez',
-    email: 'pedro@ruvik.demo', phone: '+18095551002', city: 'Santiago',
+    providerId: electric, customerUserId: pedro, customerName: 'Pedro Martinez',
+    email: 'pedro@ruvik.demo', phone: '+17185551002',
+    addressLine: '590 Vanderbilt Avenue', city: 'Brooklyn', state: 'NY', postalCode: '11238',
+    taxJurisdiction: 'NY',
     title: 'Breaker panel keeps tripping in the kitchen',
     description: 'The kitchen circuit trips whenever the microwave and kettle run together. House is from 1998.',
+    // New York taxes both materials and labour on a repair to real property.
     lines: [
-      { description: 'Electrical panel upgrade (200A)', quantity: 1, unitPriceCents: 45000, taxRateBp: 825 },
-      { description: 'Dedicated kitchen circuit', quantity: 1, unitPriceCents: 9500, taxRateBp: 825 },
+      { description: 'Electrical panel upgrade (200A)', quantity: 1, unitPriceCents: 45000, taxRateBp: 888, taxTreatment: 'taxable' },
+      { description: 'Dedicated kitchen circuit', quantity: 1, unitPriceCents: 9500, taxRateBp: 888, taxTreatment: 'taxable' },
     ],
     outcome: 'quote_sent',
   });
 
   // 3. Carpentry job scheduled after acceptance, invoice not yet raised.
   await buildJourney(db, {
-    providerId: carpentry, customerUserId: lucia, customerName: 'Lucía Guzmán',
-    email: 'lucia@ruvik.demo', phone: '+18095551003', city: 'Santo Domingo',
-    title: 'Fitted wardrobe for the main bedroom',
-    description: 'Looking for a floor-to-ceiling wardrobe, roughly 3.2m wide, with sliding doors and internal drawers.',
+    providerId: carpentry, customerUserId: lucia, customerName: 'Lucia Guzman',
+    email: 'lucia@ruvik.demo', phone: '+15035551003',
+    addressLine: '1732 Northeast Alberta Street', city: 'Portland', state: 'OR', postalCode: '97211',
+    taxJurisdiction: 'OR',
+    title: 'Fitted closet for the main bedroom',
+    description: 'Looking for a floor-to-ceiling closet, roughly 10 feet wide, with sliding doors and internal drawers.',
+    // Oregon has no general sales tax, so the rate is zero rather than relieved:
+    // the sale is taxable in principle, the state simply levies nothing.
     lines: [
-      { description: 'Fitted wardrobe — design and build (3.2m)', quantity: 1, unitPriceCents: 185000, taxRateBp: 825 },
-      { description: 'Sliding door upgrade', quantity: 2, unitPriceCents: 22000, taxRateBp: 825 },
+      { description: 'Fitted closet — design and build (10 ft)', quantity: 1, unitPriceCents: 185000, taxRateBp: 0, taxTreatment: 'taxable' },
+      { description: 'Sliding door upgrade', quantity: 2, unitPriceCents: 22000, taxRateBp: 0, taxTreatment: 'taxable' },
     ],
     outcome: 'scheduled',
   });
 
   // 4. Fresh HVAC lead with no quote yet — the provider's inbox state.
   await buildJourney(db, {
-    providerId: hvac, customerUserId: diego, customerName: 'Diego Fernández',
-    email: 'diego@ruvik.demo', phone: '+18095551004', city: 'Punta Cana',
+    providerId: hvac, customerUserId: diego, customerName: 'Diego Fernandez',
+    email: 'diego@ruvik.demo', phone: '+16025551004',
+    addressLine: '4225 East Indian School Road', city: 'Phoenix', state: 'AZ', postalCode: '85018',
+    taxJurisdiction: 'AZ',
     title: 'AC not cooling in the living room',
     description: 'Split unit runs but the room never gets cold. It was serviced about two years ago.',
     lines: [],
@@ -314,12 +419,15 @@ export async function seed(): Promise<void> {
 
   // 5. A second completed plumbing job so the provider has review history.
   await buildJourney(db, {
-    providerId: plumbing, customerUserId: lucia, customerName: 'Lucía Guzmán',
-    email: 'lucia@ruvik.demo', phone: '+18095551003', city: 'Santo Domingo',
+    providerId: plumbing, customerUserId: lucia, customerName: 'Lucia Guzman',
+    email: 'lucia@ruvik.demo', phone: '+15125551003',
+    addressLine: '4710 South Congress Avenue', city: 'Austin', state: 'TX', postalCode: '78745',
+    taxJurisdiction: 'TX',
     title: 'Kitchen sink draining slowly',
     description: 'Water pools in the sink and drains away very slowly. Plunger has not helped.',
+    // All labour on this one, so a Texas residential job carries no tax at all.
     lines: [
-      { description: 'Drain clearing and trap clean', quantity: 1, unitPriceCents: 6500, taxRateBp: 825 },
+      { description: 'Drain clearing and trap clean (labour)', quantity: 1, unitPriceCents: 6500, taxRateBp: 825, taxTreatment: 'not_subject', taxReason: 'Labour on residential real property is not subject to sales tax in TX' },
     ],
     outcome: 'completed_paid_reviewed',
     rating: 4,
@@ -330,14 +438,26 @@ export async function seed(): Promise<void> {
   // The provider dashboard is the product's centrepiece, so the primary demo
   // account carries a realistic book of work: open leads, scheduled jobs,
   // unpaid invoices and six months of completed history.
+  const plumbingProfile = PROVIDERS.find((p) => p.email === 'greenleaf@ruvik.demo')!;
   await buildPipeline(db, {
     providerId: plumbing,
-    customers: [
-      { userId: ana, name: 'Ana Reyes', email: 'ana@ruvik.demo', phone: '+18095551001' },
-      { userId: pedro, name: 'Pedro Martínez', email: 'pedro@ruvik.demo', phone: '+18095551002' },
-      { userId: lucia, name: 'Lucía Guzmán', email: 'lucia@ruvik.demo', phone: '+18095551003' },
-      { userId: diego, name: 'Diego Fernández', email: 'diego@ruvik.demo', phone: '+18095551004' },
-    ],
+    // The demo provider bills from Austin, so its documents show the Texas
+    // treatment: materials taxable, residential labour outside the tax.
+    tax: {
+      taxRateBp: plumbingProfile.taxRateBp,
+      labourTaxable: plumbingProfile.labourTaxable,
+      state: plumbingProfile.state,
+    },
+    customers: CUSTOMERS.map((cust) => ({
+      userId: { 'ana@ruvik.demo': ana, 'pedro@ruvik.demo': pedro,
+                'lucia@ruvik.demo': lucia, 'diego@ruvik.demo': diego }[cust.email]!,
+      name: cust.fullName,
+      email: cust.email,
+      phone: cust.phone,
+      city: cust.city,
+      state: cust.state,
+      addressLine: cust.addressLine,
+    })),
   });
 
   logger.info('demo data seeded');
@@ -352,9 +472,14 @@ interface JourneyInput {
   email: string;
   phone: string;
   city: string;
+  state: string;
+  postalCode: string;
+  addressLine: string;
+  /** Two-letter state the document is priced under, stored on the document. */
+  taxJurisdiction: string;
   title: string;
   description: string;
-  lines: Array<{ description: string; quantity: number; unitPriceCents: number; taxRateBp: number }>;
+  lines: LineInput[];
   outcome: 'new_lead' | 'quote_sent' | 'scheduled' | 'completed_paid_reviewed';
   rating?: number;
   reviewComment?: string;
@@ -364,12 +489,18 @@ interface JourneyInput {
 async function buildJourney(db: Awaited<ReturnType<typeof getDb>>, input: JourneyInput): Promise<void> {
   await db.tx(async (c) => {
     const { rows: clientRows } = await c.query<{ id: string }>(
-      `INSERT INTO clients (provider_id, user_id, full_name, email, phone_e164, whatsapp_phone_e164, city)
-       VALUES ($1,$2,$3,$4,$5,$5,$6)
+      `INSERT INTO clients (provider_id, user_id, full_name, email, phone_e164,
+                            whatsapp_phone_e164, address_line, city, region, postal_code)
+       VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9)
        ON CONFLICT (provider_id, user_id) WHERE user_id IS NOT NULL
-       DO UPDATE SET full_name = EXCLUDED.full_name
+       DO UPDATE SET full_name = EXCLUDED.full_name,
+                     address_line = EXCLUDED.address_line,
+                     city = EXCLUDED.city,
+                     region = EXCLUDED.region,
+                     postal_code = EXCLUDED.postal_code
        RETURNING id`,
-      [input.providerId, input.customerUserId, input.customerName, input.email, input.phone, input.city],
+      [input.providerId, input.customerUserId, input.customerName, input.email, input.phone,
+       input.addressLine, input.city, input.state, input.postalCode],
     );
     const clientId = clientRows[0].id;
 
@@ -382,14 +513,15 @@ async function buildJourney(db: Awaited<ReturnType<typeof getDb>>, input: Journe
     const reference = await nextNumber(c, input.providerId, 'job');
     const { rows: jobRows } = await c.query<{ id: string }>(
       `INSERT INTO jobs (provider_id, client_id, customer_user_id, reference, title, description,
-                         city, status, source, scheduled_start, completed_at, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'quote_request',
+                         address_line, city, region, postal_code, status, source,
+                         scheduled_start, completed_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$9,$7,$10,$11,$8,'quote_request',
                CASE WHEN $8 IN ('scheduled','completed') THEN now() + interval '3 days' ELSE NULL END,
                CASE WHEN $8 = 'completed' THEN now() - interval '5 days' ELSE NULL END,
                now() - interval '12 days')
        RETURNING id`,
       [input.providerId, clientId, input.customerUserId, reference, input.title,
-       input.description, input.city, status],
+       input.description, input.city, status, input.addressLine, input.state, input.postalCode],
     );
     const jobId = jobRows[0].id;
 
@@ -408,9 +540,10 @@ async function buildJourney(db: Awaited<ReturnType<typeof getDb>>, input: Journe
 
     const { rows: quoteRows } = await c.query<{ id: string }>(
       `INSERT INTO quotes (provider_id, job_id, number, status, currency, subtotal_cents,
-                           discount_cents, tax_cents, total_cents, valid_until, notes, terms,
+                           discount_cents, tax_cents, total_cents, taxable_base_cents,
+                           untaxed_base_cents, tax_jurisdiction, valid_until, notes, terms,
                            sent_at, accepted_at, created_at)
-       VALUES ($1,$2,$3,$4,'USD',$5,$6,$7,$8, CURRENT_DATE + 14,
+       VALUES ($1,$2,$3,$4,'USD',$5,$6,$7,$8,$9,$10,$11, CURRENT_DATE + 14,
                'Thank you for the opportunity to quote for this work.',
                'Quote valid for 14 days. Payment due within 14 days of invoice.',
                now() - interval '10 days',
@@ -418,19 +551,12 @@ async function buildJourney(db: Awaited<ReturnType<typeof getDb>>, input: Journe
                now() - interval '10 days')
        RETURNING id`,
       [input.providerId, jobId, quoteNumber, quoteStatus,
-       totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents],
+       totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents,
+       totals.taxableBaseCents, totals.untaxedBaseCents, input.taxJurisdiction],
     );
     const quoteId = quoteRows[0].id;
 
-    for (const [index, line] of totals.lines.entries()) {
-      await c.query(
-        `INSERT INTO quote_items (quote_id, description, quantity, unit_price_cents,
-                                  tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [quoteId, line.description, line.quantity, line.unitPriceCents,
-         line.taxRateBp, line.lineTotalCents, index],
-      );
-    }
+    await insertLines(c, 'quote_items', 'quote_id', quoteId, totals);
 
     await c.query(
       `INSERT INTO job_notes (job_id, provider_id, author_user_id, body, visibility)
@@ -447,25 +573,20 @@ async function buildJourney(db: Awaited<ReturnType<typeof getDb>>, input: Journe
     const { rows: invRows } = await c.query<{ id: string }>(
       `INSERT INTO invoices (provider_id, job_id, quote_id, client_id, number, status, currency,
                              issue_date, due_date, subtotal_cents, discount_cents, tax_cents,
-                             total_cents, amount_paid_cents, notes, sent_at, paid_at, created_at)
+                             total_cents, taxable_base_cents, untaxed_base_cents,
+                             tax_jurisdiction, amount_paid_cents, notes, sent_at, paid_at,
+                             created_at)
        VALUES ($1,$2,$3,$4,$5,'paid','USD', CURRENT_DATE - 5, CURRENT_DATE + 9,
-               $6,$7,$8,$9,$9,'Thank you for your business.',
+               $6,$7,$8,$9,$10,$11,$12,$9,'Thank you for your business.',
                now() - interval '5 days', now() - interval '2 days', now() - interval '5 days')
        RETURNING id`,
       [input.providerId, jobId, quoteId, clientId, invoiceNumber,
-       totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents],
+       totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents,
+       totals.taxableBaseCents, totals.untaxedBaseCents, input.taxJurisdiction],
     );
     const invoiceId = invRows[0].id;
 
-    for (const [index, line] of totals.lines.entries()) {
-      await c.query(
-        `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price_cents,
-                                    tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [invoiceId, line.description, line.quantity, line.unitPriceCents,
-         line.taxRateBp, line.lineTotalCents, index],
-      );
-    }
+    await insertLines(c, 'invoice_items', 'invoice_id', invoiceId, totals);
 
     await c.query(
       `INSERT INTO payments (provider_id, invoice_id, kind, amount_cents, currency, status, method, paid_at)
@@ -502,6 +623,16 @@ interface PipelineCustomer {
   name: string;
   email: string;
   phone: string;
+  city: string;
+  state: string;
+  addressLine: string;
+}
+
+/** The state's treatment, carried into every document the pipeline writes. */
+interface TaxProfile {
+  taxRateBp: number;
+  labourTaxable: boolean;
+  state: string;
 }
 
 const OPEN_LEADS = [
@@ -537,19 +668,21 @@ const UNPAID = [
  */
 async function buildPipeline(
   db: Awaited<ReturnType<typeof getDb>>,
-  input: { providerId: string; customers: PipelineCustomer[] },
+  input: { providerId: string; customers: PipelineCustomer[]; tax: TaxProfile },
 ): Promise<void> {
-  const { providerId, customers } = input;
+  const { providerId, customers, tax } = input;
   const pick = (index: number) => customers[index % customers.length];
 
   const clientFor = async (c: Awaited<ReturnType<typeof getDb>> | any, customer: PipelineCustomer) => {
     const { rows } = await c.query(
-      `INSERT INTO clients (provider_id, user_id, full_name, email, phone_e164, whatsapp_phone_e164)
-       VALUES ($1,$2,$3,$4,$5,$5)
+      `INSERT INTO clients (provider_id, user_id, full_name, email, phone_e164,
+                            whatsapp_phone_e164, address_line, city, region)
+       VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8)
        ON CONFLICT (provider_id, user_id) WHERE user_id IS NOT NULL
        DO UPDATE SET full_name = EXCLUDED.full_name
        RETURNING id`,
-      [providerId, customer.userId, customer.name, customer.email, customer.phone],
+      [providerId, customer.userId, customer.name, customer.email, customer.phone,
+       customer.addressLine, customer.city, customer.state],
     );
     return rows[0].id as string;
   };
@@ -563,11 +696,12 @@ async function buildPipeline(
       const { rows } = await c.query(
         `INSERT INTO jobs (provider_id, client_id, customer_user_id, reference, title, description,
                            city, status, source, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,'Santo Domingo','new_lead','quote_request',
+         VALUES ($1,$2,$3,$4,$5,$6,$8,'new_lead','quote_request',
                  now() - ($7 || ' hours')::interval)
          RETURNING id`,
         [providerId, clientId, customer.userId, reference, title,
-         'Submitted through the Ruvik app — awaiting a quote.', String((index + 1) * 7)],
+         'Submitted through the Ruvik app — awaiting a quote.', String((index + 1) * 7),
+         customer.city],
       );
       await c.query(
         `INSERT INTO job_status_events (job_id, from_status, to_status, note)
@@ -584,33 +718,29 @@ async function buildPipeline(
       const { rows } = await c.query(
         `INSERT INTO jobs (provider_id, client_id, customer_user_id, reference, title,
                            city, status, source, scheduled_start, scheduled_end, created_at)
-         VALUES ($1,$2,$3,$4,$5,'Santo Domingo','scheduled','quote_request',
+         VALUES ($1,$2,$3,$4,$5,$7,'scheduled','quote_request',
                  date_trunc('hour', now()) + ($6 || ' days')::interval + interval '9 hours',
                  date_trunc('hour', now()) + ($6 || ' days')::interval + interval '12 hours',
                  now() - interval '6 days')
          RETURNING id`,
-        [providerId, clientId, customer.userId, reference, work.title, String(work.inDays)],
+        [providerId, clientId, customer.userId, reference, work.title, String(work.inDays),
+         customer.city],
       );
 
       const quoteNumber = await nextNumber(c, providerId, 'quote');
-      const totals = computeTotals(
-        [{ description: work.title, quantity: 1, unitPriceCents: work.cents, taxRateBp: 825 }], 0,
-      );
+      const totals = computeTotals(documentLines(work.title, work.cents, tax), 0);
       const { rows: quoteRows } = await c.query(
         `INSERT INTO quotes (provider_id, job_id, number, status, currency, subtotal_cents,
-                             discount_cents, tax_cents, total_cents, sent_at, accepted_at, created_at)
-         VALUES ($1,$2,$3,'accepted','USD',$4,$5,$6,$7,
+                             discount_cents, tax_cents, total_cents, taxable_base_cents,
+                             untaxed_base_cents, tax_jurisdiction, sent_at, accepted_at, created_at)
+         VALUES ($1,$2,$3,'accepted','USD',$4,$5,$6,$7,$8,$9,$10,
                  now() - interval '5 days', now() - interval '4 days', now() - interval '5 days')
          RETURNING id`,
         [providerId, rows[0].id, quoteNumber,
-         totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents],
+         totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents,
+         totals.taxableBaseCents, totals.untaxedBaseCents, tax.state],
       );
-      await c.query(
-        `INSERT INTO quote_items (quote_id, description, quantity, unit_price_cents,
-                                  tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,1,$3,825,$4,0)`,
-        [quoteRows[0].id, work.title, work.cents, totals.lines[0].lineTotalCents],
-      );
+      await insertLines(c, 'quote_items', 'quote_id', quoteRows[0].id, totals);
       await c.query(
         `INSERT INTO job_status_events (job_id, from_status, to_status, note)
          VALUES ($1,'quoted','scheduled','Quote accepted and job booked in')`,
@@ -626,34 +756,30 @@ async function buildPipeline(
       const { rows } = await c.query(
         `INSERT INTO jobs (provider_id, client_id, customer_user_id, reference, title,
                            city, status, source, completed_at, created_at)
-         VALUES ($1,$2,$3,$4,$5,'Santo Domingo','completed','quote_request',
+         VALUES ($1,$2,$3,$4,$5,$6,'completed','quote_request',
                  now() - interval '12 days', now() - interval '25 days')
          RETURNING id`,
-        [providerId, clientId, customer.userId, reference, unpaid.title],
+        [providerId, clientId, customer.userId, reference, unpaid.title, customer.city],
       );
 
-      const totals = computeTotals(
-        [{ description: unpaid.title, quantity: 1, unitPriceCents: unpaid.cents, taxRateBp: 825 }], 0,
-      );
+      const totals = computeTotals(documentLines(unpaid.title, unpaid.cents, tax), 0);
       const invoiceNumber = await nextNumber(c, providerId, 'invoice');
       const { rows: invRows } = await c.query(
         `INSERT INTO invoices (provider_id, job_id, client_id, number, status, currency,
                                issue_date, due_date, subtotal_cents, discount_cents, tax_cents,
-                               total_cents, amount_paid_cents, sent_at, created_at)
+                               total_cents, taxable_base_cents, untaxed_base_cents,
+                               tax_jurisdiction, amount_paid_cents, sent_at, created_at)
          VALUES ($1,$2,$3,$4,$5,'USD',
                  CURRENT_DATE - 10, CURRENT_DATE + ($6)::integer,
-                 $7,$8,$9,$10,0, now() - interval '10 days', now() - interval '10 days')
+                 $7,$8,$9,$10,$11,$12,$13,0,
+                 now() - interval '10 days', now() - interval '10 days')
          RETURNING id`,
         [providerId, rows[0].id, clientId, invoiceNumber,
          unpaid.dueInDays < 0 ? 'overdue' : 'sent', String(unpaid.dueInDays),
-         totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents],
+         totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents,
+         totals.taxableBaseCents, totals.untaxedBaseCents, tax.state],
       );
-      await c.query(
-        `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price_cents,
-                                    tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,1,$3,825,$4,0)`,
-        [invRows[0].id, unpaid.title, unpaid.cents, totals.lines[0].lineTotalCents],
-      );
+      await insertLines(c, 'invoice_items', 'invoice_id', invRows[0].id, totals);
       await c.query('UPDATE providers SET completed_jobs = completed_jobs + 1 WHERE id = $1', [providerId]);
     }
 
@@ -665,38 +791,34 @@ async function buildPipeline(
       const { rows } = await c.query(
         `INSERT INTO jobs (provider_id, client_id, customer_user_id, reference, title,
                            city, status, source, completed_at, created_at)
-         VALUES ($1,$2,$3,$4,$5,'Santo Domingo','completed','quote_request',
+         VALUES ($1,$2,$3,$4,$5,$7,'completed','quote_request',
                  now() - ($6 || ' months')::interval,
                  now() - ($6 || ' months')::interval - interval '9 days')
          RETURNING id`,
-        [providerId, clientId, customer.userId, reference, past.title, String(past.monthsAgo)],
+        [providerId, clientId, customer.userId, reference, past.title, String(past.monthsAgo),
+         customer.city],
       );
 
-      const totals = computeTotals(
-        [{ description: past.title, quantity: 1, unitPriceCents: past.cents, taxRateBp: 825 }], 0,
-      );
+      const totals = computeTotals(documentLines(past.title, past.cents, tax), 0);
       const invoiceNumber = await nextNumber(c, providerId, 'invoice');
       const { rows: invRows } = await c.query(
         `INSERT INTO invoices (provider_id, job_id, client_id, number, status, currency,
                                issue_date, due_date, subtotal_cents, discount_cents, tax_cents,
-                               total_cents, amount_paid_cents, sent_at, paid_at, created_at)
+                               total_cents, taxable_base_cents, untaxed_base_cents,
+                               tax_jurisdiction, amount_paid_cents, sent_at, paid_at, created_at)
          VALUES ($1,$2,$3,$4,'paid','USD',
                  (now() - ($5 || ' months')::interval)::date,
                  (now() - ($5 || ' months')::interval)::date + 14,
-                 $6,$7,$8,$9,$9,
+                 $6,$7,$8,$9,$10,$11,$12,$9,
                  now() - ($5 || ' months')::interval,
                  now() - ($5 || ' months')::interval + interval '4 days',
                  now() - ($5 || ' months')::interval)
          RETURNING id`,
         [providerId, rows[0].id, clientId, invoiceNumber, String(past.monthsAgo),
-         totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents],
+         totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents,
+         totals.taxableBaseCents, totals.untaxedBaseCents, tax.state],
       );
-      await c.query(
-        `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price_cents,
-                                    tax_rate_bp, line_total_cents, sort_order)
-         VALUES ($1,$2,1,$3,825,$4,0)`,
-        [invRows[0].id, past.title, past.cents, totals.lines[0].lineTotalCents],
-      );
+      await insertLines(c, 'invoice_items', 'invoice_id', invRows[0].id, totals);
       await c.query(
         `INSERT INTO payments (provider_id, invoice_id, kind, amount_cents, currency, status, method, paid_at)
          VALUES ($1,$2,'invoice',$3,'USD','succeeded','transfer',

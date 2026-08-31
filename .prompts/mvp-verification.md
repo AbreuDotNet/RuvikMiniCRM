@@ -89,9 +89,9 @@ Verificar que la lógica de negocio, arquitectura y funcionalidades estén compl
 
 ## 4. VERIFICACIÓN DE COBERTURA DE TESTS
 
-- [ ] 190 tests pasando en 12 ficheros
-- [ ] Tests unitarios (76): crypto 12, pagination 16, money 14, workerHealth 11, moneyParity 9, phone 9, jobStatus 5
-- [ ] Tests de integración (30): infraestructura 19, facturación 11
+- [ ] 205 tests pasando en 13 ficheros
+- [ ] Tests unitarios (88): crypto 12, pagination 16, money 14, taxProvider 12, workerHealth 11, moneyParity 9, phone 9, jobStatus 5
+- [ ] Tests de integración (33): infraestructura 19, facturación 14
 - [ ] Tests E2E de flujos críticos (33)
 - [ ] Tests de seguridad (51): authz 20, attacks 31
 - [ ] Cobertura de rutas de dinero
@@ -155,7 +155,7 @@ Verificar que la lógica de negocio, arquitectura y funcionalidades estén compl
 - [ ] `npm install` completa sin errores
 - [ ] `npm run seed` genera dataset demo consistente
 - [ ] `npm run dev` levanta API :4000 y web :5173
-- [ ] `npm test` pasa 190 tests
+- [ ] `npm test` pasa 205 tests
 - [ ] `npm run typecheck` limpio ambos workspaces
 - [ ] `npm run test:security` pasa suites de seguridad
 - [ ] `npm audit` limpio ambos workspaces
