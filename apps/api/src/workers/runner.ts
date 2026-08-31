@@ -3,6 +3,8 @@ import { HANDLERS } from './handlers.js';
 import { logger } from '../lib/logger.js';
 import { getDb } from '../db/index.js';
 import { runMigrations } from '../db/migrate.js';
+import { env } from '../config/env.js';
+import { createWorkerHealthServer, closeHealthServer, type WorkerStatus } from './health.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +14,17 @@ const BATCH_SIZE = 5;
 let running = false;
 let timer: NodeJS.Timeout | null = null;
 let inFlight: Promise<void> = Promise.resolve();
+let lastProgressAt = Date.now();
+
+/** Marks that the poll loop is still turning; see health.ts for why this exists. */
+function beat(): void {
+  lastProgressAt = Date.now();
+}
+
+/** Snapshot for the liveness probe. */
+export function workerStatus(): WorkerStatus {
+  return { running, lastProgressAt };
+}
 
 async function tick(): Promise<void> {
   const jobs = await claimJobs(BATCH_SIZE);
@@ -33,6 +46,10 @@ async function tick(): Promise<void> {
         logger.debug({ queue: job.queue, jobId: job.id, ms: Date.now() - started }, 'job completed');
       } catch (err) {
         await failJob(job, err);
+      } finally {
+        // A slow batch must not let the heartbeat go stale: every job that
+        // settles is fresh proof the loop is still making progress.
+        beat();
       }
     }),
   );
@@ -41,10 +58,14 @@ async function tick(): Promise<void> {
 export function startWorkers(): void {
   if (running) return;
   running = true;
+  beat();
   logger.info('background workers started');
 
   const loop = async () => {
     if (!running) return;
+    // Beat before the tick, not after: if the tick never settles, this
+    // timestamp ages and the probe reports the stall instead of hiding it.
+    beat();
     inFlight = tick().catch((err) => {
       logger.error({ err }, 'worker tick failed');
     });
@@ -73,8 +94,32 @@ if (isEntrypoint) {
     await runMigrations();
     await getDb();
     startWorkers();
-    process.on('SIGTERM', () => void stopWorkers().then(() => process.exit(0)));
-    process.on('SIGINT', () => void stopWorkers().then(() => process.exit(0)));
+
+    /**
+     * Only the standalone process needs this. When WORKER_MODE is in-process
+     * the API already serves /health in the same process, and a second
+     * listener there would be redundant at best.
+     */
+    const health = createWorkerHealthServer(workerStatus, {
+      port: env.WORKER_HEALTH_PORT,
+      timeoutMs: env.WORKER_HEARTBEAT_TIMEOUT_MS,
+    });
+
+    let shuttingDown = false;
+    const shutdown = async (signal: string) => {
+      // A second SIGTERM must not race the first shutdown to process.exit.
+      if (shuttingDown) return;
+      shuttingDown = true;
+      logger.info({ signal }, 'worker shutting down');
+      // Stop the probe first: once shutdown begins the answer is "not ready",
+      // and stopWorkers() waits for the in-flight batch to drain.
+      await closeHealthServer(health);
+      await stopWorkers();
+      process.exit(0);
+    };
+
+    process.on('SIGTERM', () => void shutdown('SIGTERM'));
+    process.on('SIGINT', () => void shutdown('SIGINT'));
   })().catch((err) => {
     logger.fatal({ err }, 'worker failed to start');
     process.exit(1);

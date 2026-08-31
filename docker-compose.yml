@@ -29,6 +29,9 @@ services:
 
   api:
     build: .
+    # Without a policy a crashed container simply stays down. Not `always`:
+    # that would fight `docker compose stop` on the next daemon start.
+    restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -55,15 +58,26 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     command: ['node', 'apps/api/dist/workers/runner.js']
-    # The image's HEALTHCHECK probes /health over HTTP, which only the API
-    # serves. Inherited here it can never pass, so the container reported
-    # unhealthy forever and any orchestrator would restart it in a loop.
-    # Disabled rather than faked; a real liveness signal for the queue drainer
-    # is worth adding, but it needs a heartbeat the worker does not emit yet.
+    restart: unless-stopped
+    # The image's HEALTHCHECK probes the API's port, which the worker does not
+    # serve. It now runs its own liveness endpoint reporting whether the poll
+    # loop is still turning — a live process with a wedged loop reads as
+    # unhealthy here, which is the whole point.
+    # Each container has its own network namespace, so 127.0.0.1:4001 stays
+    # per-replica under `--scale worker=3`.
     healthcheck:
-      disable: true
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 4s
+      start_period: 20s
+      retries: 3
     environment:
       NODE_ENV: production
+      WORKER_HEALTH_PORT: 4001
       DATABASE_URL: postgres://ruvik:ruvik_local_dev@postgres:5432/ruvik?sslmode=disable
       REDIS_URL: redis://redis:6379
       API_BASE_URL: http://localhost:4000

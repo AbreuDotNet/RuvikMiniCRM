@@ -155,6 +155,46 @@ status → fallback path stays exercisable without contacting Meta.
 
 Rehearse a restore quarterly. An unrehearsed backup is a hope, not a plan.
 
+## Health probes
+
+| Process | Endpoint | Meaning |
+|---|---|---|
+| API | `GET /health` | The process is serving HTTP. |
+| API | `GET /ready` | Dependencies are reachable (database, queue depth). |
+| Worker | `GET :4001/health` | The poll loop is still turning. |
+
+Use `/health` for liveness and `/ready` for load-balancer membership: a
+database blip should drain an instance, not restart it.
+
+The worker probe answers the question the process table cannot. The poll loop
+schedules its next iteration only after the current one settles, so a handler
+that never resolves stops the loop permanently while the process stays alive —
+green in every dashboard, queue growing, nothing red. The worker records a
+heartbeat when a tick begins and when each job settles; the probe returns 503
+once that heartbeat is older than `WORKER_HEARTBEAT_TIMEOUT_MS` (60s default),
+and while the process is shutting down.
+
+Restarting a stalled worker is safe: jobs locked for more than five minutes are
+reclaimed by another worker (`LOCK_TIMEOUT_MS` in `lib/queue.ts`), so an
+interrupted job is retried rather than lost.
+
+Keep the threshold well above the slowest job. Liveness that fires early kills
+healthy workers mid-job; a stall that takes an extra minute to detect costs far
+less than a restart loop. The probe deliberately touches no database — a probe
+that did would report every worker unhealthy during an outage and trigger a
+restart storm at the worst possible moment. Watch queue depth for that instead.
+
+In Kubernetes the worker binds `0.0.0.0` so a `livenessProbe: httpGet` on the
+pod IP reaches it:
+
+```yaml
+livenessProbe:
+  httpGet: { path: /health, port: 4001 }
+  initialDelaySeconds: 20
+  periodSeconds: 30
+  failureThreshold: 3
+```
+
 ## Monitoring
 
 Scrape RED metrics per route, queue depth and age, pool saturation, and

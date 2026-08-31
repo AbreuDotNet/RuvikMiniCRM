@@ -83,6 +83,16 @@ const schema = z.object({
 
   BILLING_WEBHOOK_SECRET: z.string().optional(),
 
+  // Liveness for the standalone worker process (`npm run worker`).
+  WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(4001),
+  /**
+   * How long the poll loop may go without progress before the probe reports a
+   * stall. Generous on purpose: the loop ticks every second, so anything this
+   * large means genuinely wedged, and an over-eager threshold would kill
+   * healthy workers in the middle of a slow job.
+   */
+  WORKER_HEARTBEAT_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(60_000),
+
   RATE_LIMIT_ENABLED: booleanish.default(true),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   TRUST_PROXY: z.coerce.number().int().default(1),
