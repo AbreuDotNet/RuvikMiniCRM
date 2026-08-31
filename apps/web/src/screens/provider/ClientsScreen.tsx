@@ -54,7 +54,7 @@ export function ClientsScreen() {
         </button>
       }
     >
-      <div className="search-input-wrap" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="search-input-wrap mb-4">
         <Icon name="search" size={19} />
         <input
           className="input"
@@ -163,7 +163,7 @@ function AddClientModal({
 
   return (
     <Modal open={open} title="Add a client" onClose={onClose}>
-      {error && <p className="field__error" role="alert" style={{ marginBottom: 'var(--s3)' }}>{error}</p>}
+      {error && <p className="field__error mb-3" role="alert">{error}</p>}
 
       <TextField label="Full name" value={form.fullName} onChange={update('fullName')} required autoFocus />
       <TextField label="Phone" type="tel" placeholder="+18095551234" hint="International format" value={form.phone} onChange={update('phone')} />
@@ -216,8 +216,8 @@ export function ClientDetailScreen() {
 
   return (
     <Shell title={c.fullName} tabs={PROVIDER_TABS} back="/clients">
-      <div className="card card--pad" style={{ marginBottom: 'var(--s4)' }}>
-        <div className="row" style={{ marginBottom: 'var(--s3)' }}>
+      <div className="card card--pad mb-4">
+        <div className="row mb-3">
           <Avatar name={c.fullName} size="lg" />
           <div className="grow">
             <h2>{c.fullName}</h2>

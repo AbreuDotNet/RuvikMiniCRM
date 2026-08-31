@@ -63,13 +63,13 @@ export function RequestDetailScreen() {
 
   return (
     <Shell title={r.reference} tabs={CUSTOMER_TABS} back="/requests">
-      <div className="card card--pad" style={{ marginBottom: 'var(--s4)' }}>
-        <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
+      <div className="card card--pad mb-4">
+        <div className="row row--between mb-3">
           <StatusPill status={r.status} />
           <span className="tiny subtle">{formatRelative(r.createdAt)}</span>
         </div>
 
-        <h2 style={{ marginBottom: 'var(--s2)' }}>{r.title}</h2>
+        <h2 className="mb-2">{r.title}</h2>
         {r.description && <p className="muted small" style={{ lineHeight: 1.6 }}>{r.description}</p>}
 
         <hr className="divider" />
@@ -103,7 +103,7 @@ export function RequestDetailScreen() {
       </div>
 
       {openQuote && (
-        <div style={{ marginBottom: 'var(--s4)' }}>
+        <div className="mb-4">
           <Banner tone="info">
             You have a quote waiting for your decision.
           </Banner>
@@ -112,7 +112,7 @@ export function RequestDetailScreen() {
 
       {r.quotes.length > 0 && (
         <section className="section">
-          <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Quotes</h3>
+          <h3 className="section__title mb-3">Quotes</h3>
           <div className="stack">
             {r.quotes.map((quote) => (
               <button
@@ -121,7 +121,7 @@ export function RequestDetailScreen() {
                 className="card-button"
                 onClick={() => navigate(`/quotes/${quote.id}`)}
               >
-                <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+                <div className="row row--between mb-2">
                   <span className="strong tabular small">{quote.number}</span>
                   <StatusPill status={quote.status} />
                 </div>
@@ -140,7 +140,7 @@ export function RequestDetailScreen() {
                   )}
                 </div>
                 {quote.status === 'sent' && (
-                  <div style={{ marginTop: 'var(--s3)' }}>
+                  <div className="mt-3">
                     <Pill tone="accent">Tap to review and respond</Pill>
                   </div>
                 )}
@@ -152,7 +152,7 @@ export function RequestDetailScreen() {
 
       {r.invoices.length > 0 && (
         <section className="section">
-          <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Invoices</h3>
+          <h3 className="section__title mb-3">Invoices</h3>
           <div className="stack">
             {r.invoices.map((invoice) => (
               <button
@@ -161,7 +161,7 @@ export function RequestDetailScreen() {
                 className="card-button"
                 onClick={() => navigate(`/invoices/${invoice.id}`)}
               >
-                <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+                <div className="row row--between mb-2">
                   <span className="strong tabular small">{invoice.number}</span>
                   <StatusPill status={invoice.status} />
                 </div>
@@ -181,11 +181,11 @@ export function RequestDetailScreen() {
 
       {r.comments.length > 0 && (
         <section className="section">
-          <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Messages</h3>
+          <h3 className="section__title mb-3">Messages</h3>
           <div className="stack">
             {r.comments.map((comment) => (
               <div key={comment.id} className="card card--pad">
-                <div className="row" style={{ marginBottom: 'var(--s2)' }}>
+                <div className="row mb-2">
                   <Avatar name={comment.authorName} size="sm" />
                   <div className="grow">
                     <div className="strong small">{comment.authorName}</div>
@@ -200,7 +200,7 @@ export function RequestDetailScreen() {
       )}
 
       {r.canReview && (
-        <div style={{ marginTop: 'var(--s5)' }}>
+        <div className="mt-5">
           <Button block size="lg" icon="star" onClick={() => setReviewOpen(true)}>
             Rate this job
           </Button>
@@ -208,8 +208,8 @@ export function RequestDetailScreen() {
       )}
 
       {r.myReview && (
-        <div className="card card--pad" style={{ marginTop: 'var(--s5)' }}>
-          <div className="tiny subtle" style={{ marginBottom: 'var(--s2)' }}>YOUR REVIEW</div>
+        <div className="card card--pad mt-5">
+          <div className="tiny subtle mb-2">YOUR REVIEW</div>
           <div className="row" style={{ gap: 4, marginBottom: 'var(--s2)' }}>
             {[1, 2, 3, 4, 5].map((i) => (
               <Icon
@@ -274,7 +274,7 @@ function ReviewModal({
         Your rating helps other customers choose with confidence.
       </p>
 
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
       <div
         className="row"

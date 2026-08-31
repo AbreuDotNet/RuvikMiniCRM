@@ -6,6 +6,16 @@
     <meta name="description" content="Ruvik — find trusted local service professionals, or run your trade business from your phone." />
     <meta name="theme-color" content="#3C5A7D" />
     <title>Ruvik — Your local service marketplace</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- iOS ignores the manifest's icons and display mode; these are its
+         equivalents, and they have to stay in sync with the manifest. -->
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Superseded by the line above, kept for iOS versions that only know
+         the vendor-prefixed name. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Ruvik" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233C5A7D'/%3E%3Cpath d='M11 9l5 5-2 2-5-5a3 3 0 012-2z' fill='%23fff'/%3E%3Cpath d='M21 9a4 4 0 00-5 5l-6 6 2 2 6-6a4 4 0 005-5l-2 2-2-2 2-2z' fill='%23C4623F'/%3E%3C/svg%3E" />
     <script>
       /*

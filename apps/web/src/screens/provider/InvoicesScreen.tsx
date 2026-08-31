@@ -69,7 +69,7 @@ export function InvoicesScreen() {
       }
     >
       {invoices.response && (
-        <div className="stat-grid" style={{ marginBottom: 'var(--s4)' }}>
+        <div className="stat-grid mb-4">
           <div className="stat-tile stat-tile--accent" style={{ cursor: 'default' }}>
             <span className="stat-tile__value tabular">
               {formatMoney(invoices.response.summary.outstandingCents)}
@@ -85,7 +85,7 @@ export function InvoicesScreen() {
         </div>
       )}
 
-      <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="chip-row mb-4">
         {FILTERS.map((filter) => (
           <button
             key={filter.value || 'all'}
@@ -129,7 +129,7 @@ export function InvoicesScreen() {
               className="card-button"
               onClick={() => navigate(`/invoices/${invoice.id}`)}
             >
-              <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+              <div className="row row--between mb-2">
                 <span className="tiny subtle tabular">{invoice.number}</span>
                 <StatusPill status={invoice.status} />
               </div>
@@ -152,7 +152,7 @@ export function InvoicesScreen() {
               </div>
 
               {invoice.dueDate && invoice.status !== 'paid' && (
-                <div className="tiny subtle" style={{ marginTop: 'var(--s2)' }}>
+                <div className="tiny subtle mt-2">
                   Due {formatDate(invoice.dueDate)}
                 </div>
               )}
@@ -231,7 +231,7 @@ export function InvoiceBuilderScreen() {
 
   return (
     <Shell title="New invoice" tabs={PROVIDER_TABS} back>
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
       {quotes.loading ? (
         <SkeletonList rows={2} />
@@ -278,7 +278,7 @@ export function InvoiceBuilderScreen() {
             maxLength={2000}
           />
 
-          <div className="stack" style={{ marginTop: 'var(--s5)' }}>
+          <div className="stack mt-5">
             <Button block size="lg" icon="check" loading={busy} onClick={() => submit(true)}>
               Create and send
             </Button>

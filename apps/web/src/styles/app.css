@@ -927,6 +927,19 @@
 
 /* ---------------------------------------------------------------- misc --- */
 
+/* Spacing utilities on the --sN scale. These exist because a single margin was
+   by far the most repeated inline style in the app — 147 of the 302 of them —
+   and every one of those was a value from this scale being retyped. The number
+   in the class is the token: mt-4 is var(--s4). */
+.mt-2 { margin-top: var(--s2); }
+.mt-3 { margin-top: var(--s3); }
+.mt-4 { margin-top: var(--s4); }
+.mt-5 { margin-top: var(--s5); }
+.mb-2 { margin-bottom: var(--s2); }
+.mb-3 { margin-bottom: var(--s3); }
+.mb-4 { margin-bottom: var(--s4); }
+.mb-5 { margin-bottom: var(--s5); }
+
 .muted { color: var(--text-muted); }
 .subtle { color: var(--text-subtle); }
 .tiny { font-size: 0.78rem; }

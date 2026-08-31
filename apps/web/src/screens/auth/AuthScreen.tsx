@@ -110,7 +110,7 @@ function SignInForm({ onMfaRequired }: { onMfaRequired: (token: string) => void 
   return (
     <form onSubmit={submit} noValidate>
       {error && (
-        <div className="banner banner--danger" role="alert" style={{ marginBottom: 'var(--s4)' }}>
+        <div className="banner banner--danger mb-4" role="alert">
           <Icon name="alert" size={18} />
           <span>{error}</span>
         </div>
@@ -151,7 +151,7 @@ function SignInForm({ onMfaRequired }: { onMfaRequired: (token: string) => void 
       </Button>
 
       <div style={{ marginTop: 'var(--s6)', textAlign: 'center' }}>
-        <p className="tiny subtle" style={{ marginBottom: 'var(--s2)' }}>Quick demo access</p>
+        <p className="tiny subtle mb-2">Quick demo access</p>
         <div className="demo-chips">
           {DEMO_ACCOUNTS.map((account) => (
             <button
@@ -219,7 +219,7 @@ function SignUpForm() {
   return (
     <form onSubmit={submit} noValidate>
       {error && (
-        <div className="banner banner--danger" role="alert" style={{ marginBottom: 'var(--s4)' }}>
+        <div className="banner banner--danger mb-4" role="alert">
           <Icon name="alert" size={18} />
           <span>{error}</span>
         </div>
@@ -289,7 +289,7 @@ function SignUpForm() {
 
       <Button type="submit" block size="lg" loading={busy}>Create account</Button>
 
-      <p className="tiny subtle center" style={{ marginTop: 'var(--s4)' }}>
+      <p className="tiny subtle center mt-4">
         By continuing you agree to our terms and privacy notice. We only send
         WhatsApp messages after you turn them on in settings.
       </p>
@@ -320,13 +320,13 @@ function MfaForm({ mfaToken, onCancel }: { mfaToken: string; onCancel: () => voi
 
   return (
     <form onSubmit={submit} noValidate>
-      <h2 style={{ marginBottom: 'var(--s2)' }}>Two-factor verification</h2>
-      <p className="small muted" style={{ marginBottom: 'var(--s5)' }}>
+      <h2 className="mb-2">Two-factor verification</h2>
+      <p className="small muted mb-5">
         Enter the 6-digit code from your authenticator app, or one of your recovery codes.
       </p>
 
       {error && (
-        <div className="banner banner--danger" role="alert" style={{ marginBottom: 'var(--s4)' }}>
+        <div className="banner banner--danger mb-4" role="alert">
           <Icon name="alert" size={18} />
           <span>{error}</span>
         </div>
@@ -345,7 +345,7 @@ function MfaForm({ mfaToken, onCancel }: { mfaToken: string; onCancel: () => voi
       />
 
       <Button type="submit" block size="lg" loading={busy}>Verify</Button>
-      <Button type="button" variant="ghost" block onClick={onCancel} style={{ marginTop: 'var(--s2)' }}>
+      <Button className="mt-2" type="button" variant="ghost" block onClick={onCancel}>
         Back to sign in
       </Button>
     </form>

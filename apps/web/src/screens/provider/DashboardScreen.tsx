@@ -50,7 +50,7 @@ export function ProviderDashboardScreen() {
       ) : (
         <>
           {user?.providerStatus === 'unverified' && (
-            <div style={{ marginBottom: 'var(--s4)' }}>
+            <div className="mb-4">
               <Banner tone="warning">
                 Your business is not verified yet. Complete your profile to request verification —
                 verified providers get noticeably more requests.
@@ -59,14 +59,14 @@ export function ProviderDashboardScreen() {
           )}
 
           {dashboard.data.subscription?.status === 'past_due' && (
-            <div style={{ marginBottom: 'var(--s4)' }}>
+            <div className="mb-4">
               <Banner tone="danger">
                 Your subscription payment failed. Update your billing details to stay listed.
               </Banner>
             </div>
           )}
 
-          <div className="stat-grid" style={{ marginBottom: 'var(--s5)' }}>
+          <div className="stat-grid mb-5">
             <button
               type="button"
               className="stat-tile stat-tile--brand"
@@ -107,7 +107,7 @@ export function ProviderDashboardScreen() {
               <Icon name="chevron" size={20} className="subtle" />
             </div>
             {dashboard.data.overdueCents > 0 && (
-              <div style={{ marginTop: 'var(--s3)' }}>
+              <div className="mt-3">
                 <Banner tone="danger">
                   {formatMoney(dashboard.data.overdueCents)} is overdue.
                 </Banner>
@@ -202,7 +202,7 @@ function ActivityChart({ data }: { data: Dashboard['monthlyActivity'] }) {
 
   return (
     <>
-      <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+      <div className="row row--between mb-2">
         <span className="tiny subtle">Completed jobs</span>
         <span className="small strong tabular">{formatMoneyCompact(totalRevenue)} collected</span>
       </div>

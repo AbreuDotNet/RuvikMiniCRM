@@ -54,7 +54,7 @@ export function CalendarScreen() {
 
   return (
     <Shell title="Calendar" tabs={PROVIDER_TABS} back="/dashboard">
-      <div className="row row--between" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="row row--between mb-4">
         <button
           type="button"
           className="btn btn--secondary btn--sm"
@@ -88,7 +88,7 @@ export function CalendarScreen() {
         <div className="stack stack--loose">
           {byDay.map(([day, jobs]) => (
             <section key={day}>
-              <h3 className="section__title" style={{ marginBottom: 'var(--s2)' }}>
+              <h3 className="section__title mb-2">
                 {new Date(`${day}T12:00:00`).toLocaleDateString('en-US', {
                   weekday: 'long', day: 'numeric', month: 'short',
                 })}

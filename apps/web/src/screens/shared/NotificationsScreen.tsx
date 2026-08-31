@@ -157,7 +157,7 @@ export function NotificationsScreen() {
       )}
 
       {unread > 0 && (
-        <div style={{ marginTop: 'var(--s4)' }}>
+        <div className="mt-4">
           <Button variant="secondary" block onClick={markAll}>Mark all as read</Button>
         </div>
       )}

@@ -68,7 +68,7 @@ export function SearchScreen() {
         </button>
       }
     >
-      <div className="search-input-wrap" style={{ marginBottom: 'var(--s3)' }}>
+      <div className="search-input-wrap mb-3">
         <Icon name="search" size={19} />
         <input
           className="input"
@@ -81,7 +81,7 @@ export function SearchScreen() {
         />
       </div>
 
-      <div className="category-row" style={{ marginBottom: 'var(--s2)' }}>
+      <div className="category-row mb-2">
         <button
           type="button"
           className={`category-tile${!category ? ' is-active' : ''}`}
@@ -104,7 +104,7 @@ export function SearchScreen() {
         ))}
       </div>
 
-      <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
+      <div className="row row--between mb-3">
         <span className="tiny subtle" aria-live="polite">
           {results.loading || results.refreshing
             ? 'Searching…'
@@ -208,7 +208,7 @@ export function SearchScreen() {
 
       <Modal open={filtersOpen} title="Filters" onClose={() => setFiltersOpen(false)}>
         <div className="filter-sheet__group">
-          <p className="field__label" style={{ marginBottom: 'var(--s2)' }}>Minimum rating</p>
+          <p className="field__label mb-2">Minimum rating</p>
           <div className="rating-row">
             {['', '3', '4', '4.5'].map((value) => (
               <button

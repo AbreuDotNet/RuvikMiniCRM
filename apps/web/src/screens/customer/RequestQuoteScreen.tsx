@@ -66,7 +66,7 @@ export function RequestQuoteScreen() {
   return (
     <Shell title="Request a quote" tabs={CUSTOMER_TABS} back>
       <form onSubmit={submit} noValidate>
-        {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+        {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
         <Banner tone="info">
           Describe the job in your own words. The provider will reply with a written quote

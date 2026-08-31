@@ -70,7 +70,7 @@ export function JobsScreen() {
         </button>
       }
     >
-      <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="chip-row mb-4">
         {PIPELINE.map((stage) => (
           <button
             key={stage.value || 'all'}
@@ -109,7 +109,7 @@ export function JobsScreen() {
               className="card-button"
               onClick={() => navigate(`/jobs/${job.id}`)}
             >
-              <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+              <div className="row row--between mb-2">
                 <span className="tiny subtle tabular">{job.reference}</span>
                 <StatusPill status={job.status} />
               </div>

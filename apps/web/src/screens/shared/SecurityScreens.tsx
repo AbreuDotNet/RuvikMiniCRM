@@ -40,7 +40,7 @@ export function ChangePasswordScreen() {
   return (
     <Shell title="Change password" tabs={tabs} back="/profile">
       <form onSubmit={submit} noValidate>
-        {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+        {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
         <Banner tone="info">
           Changing your password signs you out everywhere else, which is what you want
@@ -130,7 +130,7 @@ export function MfaScreen() {
 
   return (
     <Shell title="Two-factor authentication" tabs={tabs} back="/profile">
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
       {recoveryCodes ? (
         <>
@@ -138,7 +138,7 @@ export function MfaScreen() {
             Save these recovery codes somewhere safe. Each works once, and this is the only
             time they are shown.
           </Banner>
-          <div className="card card--pad" style={{ marginTop: 'var(--s4)' }}>
+          <div className="card card--pad mt-4">
             <div
               style={{
                 display: 'grid', gridTemplateColumns: '1fr 1fr',
@@ -150,7 +150,7 @@ export function MfaScreen() {
               ))}
             </div>
           </div>
-          <div style={{ marginTop: 'var(--s4)' }}>
+          <div className="mt-4">
             <Button
               block
               variant="secondary"
@@ -162,13 +162,13 @@ export function MfaScreen() {
               Copy codes
             </Button>
           </div>
-          <div style={{ marginTop: 'var(--s3)' }}>
+          <div className="mt-3">
             <Button block onClick={() => setRecoveryCodes(null)}>Done</Button>
           </div>
         </>
       ) : user?.mfaEnabled ? (
         <>
-          <div className="card card--pad" style={{ marginBottom: 'var(--s5)' }}>
+          <div className="card card--pad mb-5">
             <div className="row" style={{ gap: 'var(--s3)' }}>
               <div className="avatar" style={{ background: 'var(--success-soft)', color: 'var(--success)' }}>
                 <Icon name="shield" size={22} />
@@ -181,7 +181,7 @@ export function MfaScreen() {
             </div>
           </div>
 
-          <h3 style={{ marginBottom: 'var(--s3)' }}>Turn it off</h3>
+          <h3 className="mb-3">Turn it off</h3>
           <TextField
             label="Confirm your password"
             type="password"
@@ -200,14 +200,14 @@ export function MfaScreen() {
           </Banner>
 
           <div className="card card--pad" style={{ margin: 'var(--s4) 0' }}>
-            <div className="tiny subtle" style={{ marginBottom: 'var(--s2)' }}>SETUP KEY</div>
+            <div className="tiny subtle mb-2">SETUP KEY</div>
             <div
               className="strong"
               style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', fontSize: '1rem' }}
             >
               {setup.secret}
             </div>
-            <div style={{ marginTop: 'var(--s3)' }}>
+            <div className="mt-3">
               <Button
                 variant="secondary"
                 size="sm"
@@ -234,7 +234,7 @@ export function MfaScreen() {
           <Button block size="lg" loading={busy} disabled={code.length < 6} onClick={confirm}>
             Confirm and turn on
           </Button>
-          <Button variant="ghost" block onClick={() => setSetup(null)} style={{ marginTop: 'var(--s2)' }}>
+          <Button className="mt-2" variant="ghost" block onClick={() => setSetup(null)}>
             Cancel
           </Button>
         </>
@@ -244,7 +244,7 @@ export function MfaScreen() {
             Two-factor adds a second step at sign-in, so a stolen password is not enough
             on its own. Required for admin accounts.
           </Banner>
-          <div style={{ marginTop: 'var(--s5)' }}>
+          <div className="mt-5">
             <Button block size="lg" icon="shield" loading={busy} onClick={begin}>
               Set up two-factor
             </Button>

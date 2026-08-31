@@ -1,8 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { AuthProvider, useAuth, type Role } from './state/auth';
-import { ToastProvider, ThemeProvider } from './state/ui';
+import { ToastProvider, ThemeProvider, useToast } from './state/ui';
 import { Spinner } from './components/ui';
+import { registerServiceWorker } from './lib/serviceWorker';
 
 import { AuthScreen } from './screens/auth/AuthScreen';
 
@@ -124,6 +125,24 @@ function RouteFocus() {
   );
 }
 
+/**
+ * Installs the service worker and reports a pending update. The new build is
+ * not forced in: it takes over on the next cold start, so nobody loses a quote
+ * they were part way through writing.
+ */
+function ServiceWorkerUpdates() {
+  const { notify } = useToast();
+
+  useEffect(
+    () => registerServiceWorker(() => {
+      notify('Ruvik has been updated. Close and reopen the app to get the new version.');
+    }),
+    [notify],
+  );
+
+  return null;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -200,6 +219,7 @@ export function App() {
           <AuthProvider>
             <AppRoutes />
             <RouteFocus />
+            <ServiceWorkerUpdates />
           </AuthProvider>
         </BrowserRouter>
       </ToastProvider>

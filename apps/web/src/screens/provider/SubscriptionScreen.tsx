@@ -94,8 +94,8 @@ export function SubscriptionScreen() {
       ) : (
         <>
           {sub && (
-            <div className="card card--pad" style={{ marginBottom: 'var(--s5)' }}>
-              <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
+            <div className="card card--pad mb-5">
+              <div className="row row--between mb-3">
                 <div>
                   <div className="tiny subtle">CURRENT PLAN</div>
                   <h2>{sub.plan.name}</h2>
@@ -109,13 +109,13 @@ export function SubscriptionScreen() {
               </div>
 
               {sub.currentPeriodEnd && (
-                <p className="small muted" style={{ marginTop: 'var(--s2)' }}>
+                <p className="small muted mt-2">
                   {sub.cancelAtPeriodEnd ? 'Ends' : 'Renews'} on {formatDate(sub.currentPeriodEnd)}
                 </p>
               )}
 
               {sub.status === 'pending_payment' && (
-                <div style={{ marginTop: 'var(--s4)' }}>
+                <div className="mt-4">
                   <Banner tone="warning">
                     Waiting for payment confirmation. Your listings go live as soon as the
                     payment provider confirms the charge.
@@ -124,7 +124,7 @@ export function SubscriptionScreen() {
               )}
 
               {sub.status === 'past_due' && (
-                <div style={{ marginTop: 'var(--s4)' }}>
+                <div className="mt-4">
                   <Banner tone="danger">
                     Your last payment failed. Renew to keep your profile listed in search.
                   </Banner>
@@ -132,7 +132,7 @@ export function SubscriptionScreen() {
               )}
 
               {sub.status === 'active' && !sub.cancelAtPeriodEnd && (
-                <div style={{ marginTop: 'var(--s4)' }}>
+                <div className="mt-4">
                   <Button variant="ghost" block onClick={() => setCancelOpen(true)}>
                     Cancel subscription
                   </Button>
@@ -141,7 +141,7 @@ export function SubscriptionScreen() {
             </div>
           )}
 
-          <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>
+          <h3 className="section__title mb-3">
             {sub ? 'Change plan' : 'Choose a plan'}
           </h3>
 
@@ -154,7 +154,7 @@ export function SubscriptionScreen() {
                   className="card card--pad"
                   style={isCurrent ? { borderColor: 'var(--accent)', borderWidth: 2 } : undefined}
                 >
-                  <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+                  <div className="row row--between mb-2">
                     <h3>{plan.name}</h3>
                     {isCurrent && <Pill tone="accent">Current</Pill>}
                   </div>
@@ -167,7 +167,7 @@ export function SubscriptionScreen() {
                   </div>
 
                   {plan.description && (
-                    <p className="small muted" style={{ marginTop: 'var(--s2)' }}>{plan.description}</p>
+                    <p className="small muted mt-2">{plan.description}</p>
                   )}
 
                   <ul style={{ listStyle: 'none', padding: 0, margin: 'var(--s4) 0 0' }}>
@@ -184,7 +184,7 @@ export function SubscriptionScreen() {
                   </ul>
 
                   {!isCurrent && (
-                    <div style={{ marginTop: 'var(--s4)' }}>
+                    <div className="mt-4">
                       <Button
                         block
                         variant={plan.code === 'pro' ? 'primary' : 'secondary'}
@@ -203,7 +203,7 @@ export function SubscriptionScreen() {
 
           {sub && sub.payments.length > 0 && (
             <section className="section" style={{ marginTop: 'var(--s6)' }}>
-              <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Billing history</h3>
+              <h3 className="section__title mb-3">Billing history</h3>
               <div className="list-group">
                 {sub.payments.map((payment, index) => (
                   <div key={index} className="list-item" style={{ cursor: 'default' }}>

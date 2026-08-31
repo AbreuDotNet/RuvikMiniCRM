@@ -78,7 +78,7 @@ export function ProviderProfileScreen() {
           )}
         </div>
 
-        {p.tagline && <p className="muted small" style={{ marginBottom: 'var(--s2)' }}>{p.tagline}</p>}
+        {p.tagline && <p className="muted small mb-2">{p.tagline}</p>}
 
         <div className="row row--wrap" style={{ gap: 'var(--s3)', marginBottom: 'var(--s4)' }}>
           <Stars rating={p.ratingAvg} count={p.ratingCount} />
@@ -171,14 +171,14 @@ export function ProviderProfileScreen() {
           <div className="stack stack--loose">
             {p.bio && (
               <section>
-                <h3 style={{ marginBottom: 'var(--s2)' }}>About</h3>
+                <h3 className="mb-2">About</h3>
                 <p className="muted" style={{ lineHeight: 1.6 }}>{p.bio}</p>
               </section>
             )}
 
             {p.portfolio.length > 0 && (
               <section>
-                <h3 style={{ marginBottom: 'var(--s3)' }}>Recent work</h3>
+                <h3 className="mb-3">Recent work</h3>
                 <div className="photo-grid">
                   {p.portfolio.map((photo) => (
                     <div key={photo.id} className="photo-grid__item">
@@ -190,7 +190,7 @@ export function ProviderProfileScreen() {
             )}
 
             <section>
-              <h3 style={{ marginBottom: 'var(--s3)' }}>Working hours</h3>
+              <h3 className="mb-3">Working hours</h3>
               <div className="list-group">
                 {DAY_LABELS.map(([key, label]) => {
                   const hours = p.workingHours?.[key];
@@ -209,7 +209,7 @@ export function ProviderProfileScreen() {
 
             {p.certifications.length > 0 && (
               <section>
-                <h3 style={{ marginBottom: 'var(--s3)' }}>Credentials</h3>
+                <h3 className="mb-3">Credentials</h3>
                 <div className="row row--wrap" style={{ gap: 'var(--s2)' }}>
                   {p.certifications.map((cert) => (
                     <Pill key={cert} tone="brand"><Icon name="shield" size={12} /> {cert}</Pill>
@@ -219,7 +219,7 @@ export function ProviderProfileScreen() {
             )}
 
             <section>
-              <h3 style={{ marginBottom: 'var(--s3)' }}>Details</h3>
+              <h3 className="mb-3">Details</h3>
               <div className="list-group">
                 <div className="list-item" style={{ cursor: 'default', minHeight: 46 }}>
                   <span className="grow small muted">Service radius</span>
@@ -251,7 +251,7 @@ export function ProviderProfileScreen() {
             <div className="stack">
               {p.reviews.map((review) => (
                 <article key={review.id} className="card card--pad">
-                  <div className="row" style={{ marginBottom: 'var(--s2)' }}>
+                  <div className="row mb-2">
                     <Avatar name={review.customerName} size="sm" />
                     <div className="grow">
                       <div className="strong small">{review.customerName}</div>

@@ -46,14 +46,14 @@ export function ServiceDetailScreen() {
 
   return (
     <Shell title="Service" tabs={CUSTOMER_TABS} back>
-      <div className="card card--pad" style={{ marginBottom: 'var(--s4)' }}>
-        <div className="row" style={{ marginBottom: 'var(--s3)' }}>
+      <div className="card card--pad mb-4">
+        <div className="row mb-3">
           <div className="avatar avatar--lg" style={{ background: 'var(--brand-soft)', color: 'var(--brand)' }}>
             <Icon name={categoryIcon(s.category.slug)} size={32} />
           </div>
           <div className="grow">
             <Pill tone="brand">{s.category.name}</Pill>
-            <h2 style={{ marginTop: 'var(--s2)' }}>{s.title}</h2>
+            <h2 className="mt-2">{s.title}</h2>
           </div>
         </div>
 
@@ -82,14 +82,14 @@ export function ServiceDetailScreen() {
 
       {s.description && (
         <section className="section">
-          <h3 style={{ marginBottom: 'var(--s2)' }}>What is included</h3>
+          <h3 className="mb-2">What is included</h3>
           <p className="muted" style={{ lineHeight: 1.65 }}>{s.description}</p>
         </section>
       )}
 
       {s.coverageArea && (
         <section className="section">
-          <h3 style={{ marginBottom: 'var(--s2)' }}>Coverage area</h3>
+          <h3 className="mb-2">Coverage area</h3>
           <p className="muted row" style={{ gap: 6 }}>
             <Icon name="map-pin" size={16} /> {s.coverageArea}
           </p>
@@ -97,7 +97,7 @@ export function ServiceDetailScreen() {
       )}
 
       <section className="section">
-        <h3 style={{ marginBottom: 'var(--s3)' }}>Offered by</h3>
+        <h3 className="mb-3">Offered by</h3>
         <button
           type="button"
           className="card-button"

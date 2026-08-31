@@ -115,7 +115,7 @@ export function QuoteViewScreen() {
       />
 
       {q.status === 'accepted' && (
-        <div style={{ marginTop: 'var(--s4)' }}>
+        <div className="mt-4">
           <Banner tone="success" icon="check">
             Accepted on {formatDate(q.acceptedAt)}. The job is approved and ready to schedule.
           </Banner>
@@ -123,7 +123,7 @@ export function QuoteViewScreen() {
       )}
 
       {q.status === 'declined' && (
-        <div style={{ marginTop: 'var(--s4)' }}>
+        <div className="mt-4">
           <Banner tone="warning">Declined on {formatDate(q.declinedAt)}.</Banner>
         </div>
       )}

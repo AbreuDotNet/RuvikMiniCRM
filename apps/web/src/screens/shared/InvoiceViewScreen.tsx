@@ -102,12 +102,12 @@ export function InvoiceViewScreen() {
       />
 
       {inv.status === 'paid' && (
-        <div style={{ marginTop: 'var(--s4)' }}>
+        <div className="mt-4">
           <Banner tone="success" icon="check">Paid in full on {formatDate(inv.paidAt)}.</Banner>
         </div>
       )}
       {inv.status === 'overdue' && (
-        <div style={{ marginTop: 'var(--s4)' }}>
+        <div className="mt-4">
           <Banner tone="danger">
             This invoice is past its due date. Outstanding balance {formatMoney(inv.balanceCents, inv.currency)}.
           </Banner>
@@ -115,8 +115,8 @@ export function InvoiceViewScreen() {
       )}
 
       {inv.payments.length > 0 && (
-        <section className="section" style={{ marginTop: 'var(--s5)' }}>
-          <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Payments</h3>
+        <section className="section mt-5">
+          <h3 className="section__title mb-3">Payments</h3>
           <div className="list-group">
             {inv.payments.map((payment, index) => (
               <div key={index} className="list-item" style={{ cursor: 'default' }}>
@@ -193,7 +193,7 @@ function RecordPaymentModal({
         Outstanding balance: <strong>{formatMoney(balanceCents, currency)}</strong>
       </p>
 
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
       <TextField
         label="Amount"

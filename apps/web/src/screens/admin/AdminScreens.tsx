@@ -41,7 +41,7 @@ export function AdminDashboardScreen() {
       ) : (
         <>
           {metrics.data.providers.pendingVerification > 0 && (
-            <div style={{ marginBottom: 'var(--s4)' }}>
+            <div className="mb-4">
               <Banner tone="warning">
                 {metrics.data.providers.pendingVerification} provider
                 {metrics.data.providers.pendingVerification === 1 ? '' : 's'} waiting for verification review.
@@ -186,7 +186,7 @@ export function AdminProvidersScreen() {
 
   return (
     <Shell title="Providers" tabs={ADMIN_TABS} action={<AccountAction />}>
-      <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="chip-row mb-4">
         {VERIFICATION_FILTERS.map((option) => (
           <button
             key={option.value || 'all'}
@@ -295,7 +295,7 @@ function VerificationModal({
 
   return (
     <Modal open title={provider.businessName} onClose={onClose}>
-      <div className="stack stack--tight" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="stack stack--tight mb-4">
         <Row label="Owner" value={provider.owner.fullName} />
         <Row label="Email" value={provider.owner.email} />
         <Row label="City" value={provider.city ?? '—'} />
@@ -394,7 +394,7 @@ export function AdminUsersScreen() {
 
   return (
     <Shell title="Users" tabs={ADMIN_TABS} action={<AccountAction />}>
-      <div className="search-input-wrap" style={{ marginBottom: 'var(--s3)' }}>
+      <div className="search-input-wrap mb-3">
         <Icon name="search" size={19} />
         <input
           className="input"
@@ -406,7 +406,7 @@ export function AdminUsersScreen() {
         />
       </div>
 
-      <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="chip-row mb-4">
         {[
           { value: '', label: 'All' },
           { value: 'customer', label: 'Customers' },
@@ -509,7 +509,7 @@ function UserModal({
 
   return (
     <Modal open title={user.fullName} onClose={onClose}>
-      <div className="stack stack--tight" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="stack stack--tight mb-4">
         <Row label="Email" value={user.email} />
         <Row label="Role" value={user.role} />
         <Row label="Status" value={user.status} />
@@ -594,7 +594,7 @@ export function AdminReviewsScreen() {
 
   return (
     <Shell title="Reviews" tabs={ADMIN_TABS} action={<AccountAction />}>
-      <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="chip-row mb-4">
         {[
           { value: '', label: 'All' },
           { value: 'published', label: 'Published' },
@@ -629,7 +629,7 @@ export function AdminReviewsScreen() {
               className="card-button"
               onClick={() => setTarget(review)}
             >
-              <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+              <div className="row row--between mb-2">
                 <Stars rating={review.rating} size={14} />
                 <StatusPill status={review.status} />
               </div>
@@ -662,7 +662,7 @@ export function AdminReviewsScreen() {
       >
         {target && (
           <>
-            <div className="card card--pad" style={{ marginBottom: 'var(--s4)' }}>
+            <div className="card card--pad mb-4">
               <Stars rating={target.rating} size={16} />
               {target.comment && (
                 <p className="small" style={{ marginTop: 'var(--s2)', lineHeight: 1.55 }}>
@@ -671,7 +671,7 @@ export function AdminReviewsScreen() {
               )}
             </div>
 
-            <div className="stack stack--tight" style={{ marginBottom: 'var(--s4)' }}>
+            <div className="stack stack--tight mb-4">
               <Row label="Customer" value={target.customerName} />
               <Row label="Provider" value={target.providerName} />
               <Row label="Job" value={target.jobReference} />
@@ -773,8 +773,8 @@ export function AdminAuditScreen() {
 
   return (
     <Shell title="Audit log" tabs={ADMIN_TABS} action={<AccountAction />}>
-      <div className="card card--pad" style={{ marginBottom: 'var(--s4)' }}>
-        <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
+      <div className="card card--pad mb-4">
+        <div className="row row--between mb-3">
           <div>
             <div className="strong small">Tamper-evident chain</div>
             <div className="tiny subtle">
@@ -791,7 +791,7 @@ export function AdminAuditScreen() {
           Verify chain integrity
         </Button>
         {integrity && !integrity.ok && (
-          <div style={{ marginTop: 'var(--s3)' }}>
+          <div className="mt-3">
             <Banner tone="danger">
               Chain broken at entry #{integrity.brokenAtId}. Investigate immediately.
             </Banner>

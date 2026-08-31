@@ -34,7 +34,7 @@ export function RequestsScreen() {
 
   return (
     <Shell title="Requests" tabs={CUSTOMER_TABS}>
-      <div className="chip-row" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="chip-row mb-4">
         {FILTERS.map((filter) => (
           <button
             key={filter.value || 'all'}
@@ -77,7 +77,7 @@ export function RequestsScreen() {
               className="card-button"
               onClick={() => navigate(`/requests/${request.id}`)}
             >
-              <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+              <div className="row row--between mb-2">
                 <span className="tiny subtle tabular">{request.reference}</span>
                 <Pill tone={statusTone(request.status)}>{statusLabel(request.status)}</Pill>
               </div>
@@ -102,7 +102,7 @@ export function RequestsScreen() {
               </div>
 
               {request.canReview && (
-                <div style={{ marginTop: 'var(--s3)' }}>
+                <div className="mt-3">
                   <Pill tone="accent"><Icon name="star" size={12} /> Leave a review</Pill>
                 </div>
               )}

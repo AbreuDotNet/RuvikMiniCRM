@@ -73,7 +73,7 @@ export function SettingsScreen() {
 
   return (
     <Shell title="Profile" tabs={tabs}>
-      <div className="card card--pad" style={{ marginBottom: 'var(--s5)' }}>
+      <div className="card card--pad mb-5">
         <div className="row">
           <Avatar name={user.fullName} size="lg" />
           <div className="grow">
@@ -89,7 +89,7 @@ export function SettingsScreen() {
 
       {user.role === 'provider' && (
         <section className="section">
-          <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Business</h3>
+          <h3 className="section__title mb-3">Business</h3>
           <div className="list-group">
             <SettingRow icon="briefcase" label="Business profile" onClick={() => navigate('/profile/business')} />
             <SettingRow icon="grid" label="Service listings" onClick={() => navigate('/services')} />
@@ -105,13 +105,13 @@ export function SettingsScreen() {
       )}
 
       <section className="section">
-        <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Notifications</h3>
+        <h3 className="section__title mb-3">Notifications</h3>
         <div className="card card--pad">
           {consent.loading ? (
             <SkeletonList rows={1} />
           ) : (
             <>
-              <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
+              <div className="row row--between mb-3">
                 <div className="row" style={{ gap: 'var(--s3)' }}>
                   <div
                     className="avatar avatar--sm"
@@ -133,7 +133,7 @@ export function SettingsScreen() {
                 </Pill>
               </div>
 
-              <p className="tiny subtle" style={{ marginBottom: 'var(--s3)' }}>
+              <p className="tiny subtle mb-3">
                 We only send quotes, invoices and appointment reminders — never marketing.
                 You can turn this off at any time, or reply STOP on WhatsApp.
               </p>
@@ -151,7 +151,7 @@ export function SettingsScreen() {
       </section>
 
       <section className="section">
-        <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Appearance</h3>
+        <h3 className="section__title mb-3">Appearance</h3>
         <div className="segmented">
           {(['system', 'light', 'dark'] as ThemeChoice[]).map((option) => (
             <button
@@ -168,7 +168,7 @@ export function SettingsScreen() {
       </section>
 
       <section className="section">
-        <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Security</h3>
+        <h3 className="section__title mb-3">Security</h3>
         <div className="list-group">
           <SettingRow icon="lock" label="Change password" onClick={() => navigate('/security/password')} />
           <SettingRow
@@ -181,12 +181,12 @@ export function SettingsScreen() {
       </section>
 
       <section className="section">
-        <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Privacy</h3>
+        <h3 className="section__title mb-3">Privacy</h3>
         <div className="list-group">
           <SettingRow icon="download" label="Download my data" onClick={exportData} />
           <SettingRow icon="trash" label="Delete my account" danger onClick={() => setDeleteOpen(true)} />
         </div>
-        <p className="tiny subtle" style={{ marginTop: 'var(--s3)' }}>
+        <p className="tiny subtle mt-3">
           Your export includes your profile, requests, reviews, notifications and consent history.
         </p>
       </section>
@@ -277,7 +277,7 @@ function WhatsAppConsentModal({
 
   return (
     <Modal open={open} title="Turn on WhatsApp messages" onClose={onClose}>
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
       <p className="modal__body">
         We will send quotes, invoices and appointment reminders to this number using the
@@ -356,7 +356,7 @@ function DeleteAccountModal({
         with your personal details removed.
       </p>
 
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
       <TextField
         label="Confirm your password"

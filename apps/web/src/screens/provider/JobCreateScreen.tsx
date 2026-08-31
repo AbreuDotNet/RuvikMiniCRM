@@ -79,7 +79,7 @@ export function JobCreateScreen() {
 
   return (
     <Shell title="New job" tabs={PROVIDER_TABS} back="/jobs">
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
       <div className="segmented">
         <button

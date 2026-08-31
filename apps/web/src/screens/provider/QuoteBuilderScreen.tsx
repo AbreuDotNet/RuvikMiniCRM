@@ -147,7 +147,7 @@ export function QuoteBuilderScreen() {
   return (
     <Shell title="New quote" tabs={PROVIDER_TABS} back>
 
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
       {jobs.loading ? (
         <SkeletonList rows={1} />
@@ -167,7 +167,7 @@ export function QuoteBuilderScreen() {
         />
       )}
 
-      <section style={{ marginBottom: 'var(--s5)' }}>
+      <section className="mb-5">
         <div className="section__head">
           <h3 className="section__title">Line items</h3>
           <button
@@ -196,13 +196,12 @@ export function QuoteBuilderScreen() {
             </div>
 
             <input
-              className="input"
+              className="input mb-2"
               placeholder="Description of the work"
               value={line.description}
               onChange={(e) => updateLine(line.key, 'description', e.target.value)}
               aria-label={`Item ${index + 1} description`}
               maxLength={300}
-              style={{ marginBottom: 'var(--s2)' }}
             />
 
             <div className="line-editor__grid">
@@ -251,7 +250,7 @@ export function QuoteBuilderScreen() {
         ))}
       </section>
 
-      <div className="card card--pad" style={{ marginBottom: 'var(--s5)' }}>
+      <div className="card card--pad mb-5">
         <div className="doc-total-row">
           <span>Subtotal</span><span>{formatMoney(totals.subtotal)}</span>
         </div>
@@ -297,7 +296,7 @@ export function QuoteBuilderScreen() {
         maxLength={2000}
       />
 
-      <div className="stack" style={{ marginTop: 'var(--s5)' }}>
+      <div className="stack mt-5">
         <Button
           block
           size="lg"
@@ -319,7 +318,7 @@ export function QuoteBuilderScreen() {
         </Button>
       </div>
 
-      <p className="tiny subtle center" style={{ marginTop: 'var(--s4)' }}>
+      <p className="tiny subtle center mt-4">
         <Icon name="info" size={13} /> Sending generates a branded PDF and notifies your customer
         in the app. WhatsApp is used only if they have opted in.
       </p>

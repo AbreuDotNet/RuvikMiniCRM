@@ -112,10 +112,10 @@ export function BusinessProfileScreen() {
 
   return (
     <Shell title="Business profile" tabs={PROVIDER_TABS} back="/profile">
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
-      <div className="card card--pad" style={{ marginBottom: 'var(--s5)' }}>
-        <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
+      <div className="card card--pad mb-5">
+        <div className="row row--between mb-3">
           <div>
             <div className="tiny subtle">VERIFICATION</div>
             <StatusPill status={profile.data.verificationStatus} />
@@ -130,7 +130,7 @@ export function BusinessProfileScreen() {
           <p className="small muted">{profile.data.verificationNote}</p>
         )}
 
-        <label className="checkbox-row" style={{ marginTop: 'var(--s2)' }}>
+        <label className="checkbox-row mt-2">
           <input
             type="checkbox"
             checked={published}
@@ -202,7 +202,7 @@ export function BusinessProfileScreen() {
 
       <Button block size="lg" loading={busy} onClick={save}>Save profile</Button>
 
-      <div style={{ marginTop: 'var(--s3)' }}>
+      <div className="mt-3">
         <Button
           variant="secondary"
           block
@@ -312,7 +312,7 @@ export function ServicesScreen() {
                 <StatusPill status={service.status} />
               </div>
 
-              <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
+              <div className="row row--between mb-3">
                 <span className="small muted">
                   {service.pricingType === 'request_quote' ? 'Quote on request'
                     : service.pricingType === 'starting_at' ? 'Starting at'
@@ -438,7 +438,7 @@ function ServiceEditor({
 
   return (
     <Modal open title={isNew ? 'New listing' : 'Edit listing'} onClose={onClose}>
-      {error && <div style={{ marginBottom: 'var(--s4)' }}><Banner tone="danger">{error}</Banner></div>}
+      {error && <div className="mb-4"><Banner tone="danger">{error}</Banner></div>}
 
       <SelectField
         label="Category"

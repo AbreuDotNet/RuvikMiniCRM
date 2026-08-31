@@ -72,13 +72,13 @@ export function JobDetailScreen() {
 
   return (
     <Shell title={j.reference} tabs={PROVIDER_TABS} back="/jobs">
-      <div className="card card--pad" style={{ marginBottom: 'var(--s4)' }}>
-        <div className="row row--between" style={{ marginBottom: 'var(--s3)' }}>
+      <div className="card card--pad mb-4">
+        <div className="row row--between mb-3">
           <StatusPill status={j.status} />
           <span className="tiny subtle">{formatRelative(j.createdAt)}</span>
         </div>
 
-        <h2 style={{ marginBottom: 'var(--s2)' }}>{j.title}</h2>
+        <h2 className="mb-2">{j.title}</h2>
         {j.description && <p className="muted small" style={{ lineHeight: 1.6 }}>{j.description}</p>}
 
         {j.allowedNextStatuses.length > 0 && (
@@ -92,7 +92,7 @@ export function JobDetailScreen() {
       </div>
 
       <section className="section">
-        <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Client</h3>
+        <h3 className="section__title mb-3">Client</h3>
         <div className="card card--pad">
           <button
             type="button"
@@ -140,7 +140,7 @@ export function JobDetailScreen() {
 
       {j.addressLine && (
         <section className="section">
-          <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Location</h3>
+          <h3 className="section__title mb-3">Location</h3>
           <div className="card card--pad row" style={{ gap: 'var(--s2)' }}>
             <Icon name="map-pin" size={18} className="muted" />
             <span className="small">{j.addressLine}{j.city ? `, ${j.city}` : ''}</span>
@@ -150,7 +150,7 @@ export function JobDetailScreen() {
 
       {j.scheduledStart && (
         <section className="section">
-          <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Scheduled</h3>
+          <h3 className="section__title mb-3">Scheduled</h3>
           <div className="card card--pad row" style={{ gap: 'var(--s2)' }}>
             <Icon name="calendar" size={18} className="muted" />
             <span className="small strong">{formatDateTime(j.scheduledStart)}</span>
@@ -167,7 +167,7 @@ export function JobDetailScreen() {
         </div>
         {j.quotes.length === 0 ? (
           <div className="card card--pad center">
-            <p className="small muted" style={{ marginBottom: 'var(--s3)' }}>
+            <p className="small muted mb-3">
               No quote yet. Sending one usually takes under two minutes.
             </p>
             <Button icon="file-text" onClick={() => navigate(`/quotes/new?job=${j.id}`)}>
@@ -197,11 +197,11 @@ export function JobDetailScreen() {
       </section>
 
       {canInvoice && (
-        <div style={{ marginBottom: 'var(--s5)' }}>
+        <div className="mb-5">
           <Banner tone="success" icon="check">
             This quote was accepted — you can turn it into an invoice in one tap.
           </Banner>
-          <div style={{ marginTop: 'var(--s3)' }}>
+          <div className="mt-3">
             <Button
               block
               icon="receipt"
@@ -215,7 +215,7 @@ export function JobDetailScreen() {
 
       {j.invoices.length > 0 && (
         <section className="section">
-          <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>Invoices</h3>
+          <h3 className="section__title mb-3">Invoices</h3>
           <div className="list-group">
             {j.invoices.map((invoice) => (
               <button
@@ -250,14 +250,14 @@ export function JobDetailScreen() {
           <div className="stack">
             {j.notes.map((note) => (
               <div key={note.id} className="card card--pad">
-                <div className="row row--between" style={{ marginBottom: 'var(--s2)' }}>
+                <div className="row row--between mb-2">
                   <span className="tiny strong subtle">{note.authorName}</span>
                   <Pill tone={note.visibility === 'internal' ? 'neutral' : 'brand'}>
                     {note.visibility === 'internal' ? 'Internal only' : 'Shared with customer'}
                   </Pill>
                 </div>
                 <p className="small" style={{ lineHeight: 1.55 }}>{note.body}</p>
-                <div className="tiny subtle" style={{ marginTop: 'var(--s2)' }}>
+                <div className="tiny subtle mt-2">
                   {formatRelative(note.createdAt)}
                 </div>
               </div>
@@ -267,7 +267,7 @@ export function JobDetailScreen() {
       </section>
 
       <section className="section">
-        <h3 className="section__title" style={{ marginBottom: 'var(--s3)' }}>History</h3>
+        <h3 className="section__title mb-3">History</h3>
         <div className="card card--pad">
           <div className="timeline">
             {j.timeline.map((event, index) => (
@@ -339,7 +339,7 @@ function StatusModal({
           </Button>
         ))}
       </div>
-      <div style={{ marginTop: 'var(--s4)' }}>
+      <div className="mt-4">
         <Button variant="ghost" block onClick={onClose}>Cancel</Button>
       </div>
     </Modal>
@@ -379,7 +379,7 @@ function NoteModal({
         autoFocus
       />
 
-      <div className="segmented" style={{ marginBottom: 'var(--s4)' }}>
+      <div className="segmented mb-4">
         <button
           type="button"
           className={`segmented__option${visibility === 'internal' ? ' is-active' : ''}`}
@@ -396,7 +396,7 @@ function NoteModal({
         </button>
       </div>
 
-      <p className="tiny subtle" style={{ marginBottom: 'var(--s4)' }}>
+      <p className="tiny subtle mb-4">
         {visibility === 'internal'
           ? 'Only you can see internal notes. The customer never sees them.'
           : 'The customer will see this note and get a notification.'}

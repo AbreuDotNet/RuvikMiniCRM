@@ -1,6 +1,43 @@
 import { z } from 'zod';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { booleanish } from '../lib/zodBoolean.js';
 import crypto from 'node:crypto';
+
+/**
+ * Loads a .env into process.env, which .env.example has always documented but
+ * nothing actually read — so every value in it was silently ignored.
+ *
+ * Uses Node's own loader rather than a dependency, and it does not overwrite
+ * anything already set: the real environment wins, the file only fills gaps.
+ * That keeps `FOO=bar npm start` working and keeps production, where secrets
+ * arrive from a secrets manager, unaffected by a stray file on disk.
+ *
+ * The file lives at the repository root while the API usually runs from
+ * apps/api, so the lookup walks up a few levels from the working directory.
+ */
+function loadDotEnv(): void {
+  if (typeof process.loadEnvFile !== 'function') return;
+
+  let dir = process.cwd();
+  for (let depth = 0; depth < 4; depth++) {
+    const candidate = resolve(dir, '.env');
+    if (existsSync(candidate)) {
+      try {
+        process.loadEnvFile(candidate);
+      } catch {
+        // Unreadable or malformed: the real environment still applies, and
+        // the schema below reports anything genuinely missing.
+      }
+      return;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return;
+    dir = parent;
+  }
+}
+
+loadDotEnv();
 
 /**
  * Configuration is validated once at boot. A missing or weak secret in
