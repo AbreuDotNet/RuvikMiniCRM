@@ -30,7 +30,7 @@ export async function resetDatabase(): Promise<void> {
     TRUNCATE TABLE
       audit_logs, job_queue, dead_letters, webhook_events, idempotency_keys,
       whatsapp_messages, whatsapp_consents, notifications, support_tickets,
-      reviews, payments, subscriptions, invoice_items, invoices,
+      provider_status_events, reviews, payments, subscriptions, invoice_items, invoices,
       quote_items, quotes, job_notes, job_status_events, jobs, clients,
       provider_portfolio_images, services, files, providers, customer_profiles,
       password_resets, refresh_tokens, users, number_sequences

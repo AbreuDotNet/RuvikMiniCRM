@@ -85,7 +85,7 @@ authRouter.post(
     const presented = req.cookies?.[REFRESH_COOKIE] ?? req.body?.refreshToken;
     if (typeof presented !== 'string' || !presented) throw unauthorized('No session to refresh.');
 
-    const { userId, refresh } = await rotateRefreshToken(presented, ctxOf(req));
+    const { userId, refresh, aal } = await rotateRefreshToken(presented, ctxOf(req));
     const db = await getDb();
     const { rows } = await db.query<{ role: any }>('SELECT role FROM users WHERE id = $1', [userId]);
     const { rows: prov } = await db.query<{ id: string }>(
@@ -97,6 +97,10 @@ authRouter.post(
       userId,
       role: rows[0].role,
       providerId: prov[0]?.id ?? null,
+      // Without this the token was re-minted at aal1, so an MFA-elevated
+      // admin silently lost access to every requireMfa route one token
+      // lifetime after signing in.
+      aal,
     });
 
     res.cookie(REFRESH_COOKIE, refresh.token, cookieOptions);
@@ -188,6 +192,12 @@ authRouter.get(
   '/me',
   authenticate,
   asyncHandler(async (req, res) => {
-    res.json({ user: await svc.loadPublicUser(req.auth!.userId) });
+    res.json({
+      user: await svc.loadPublicUser(req.auth!.userId),
+      // The session's auth level, not the account's. The admin panel uses it
+      // to explain up front that a state-changing action needs two-factor,
+      // rather than letting someone write a reason and then hit a 403.
+      sessionAal: req.auth!.aal,
+    });
   }),
 );

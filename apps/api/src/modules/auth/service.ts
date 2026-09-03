@@ -75,7 +75,7 @@ async function startSession(userId: string, role: Role, ctx: RequestContext, aal
     providerId: rows[0]?.id ?? null,
     aal,
   });
-  const refresh = await issueRefreshToken({ userId, ip: ctx.ip, userAgent: ctx.userAgent });
+  const refresh = await issueRefreshToken({ userId, ip: ctx.ip, userAgent: ctx.userAgent, aal });
   await db.query('UPDATE users SET last_login_at = now() WHERE id = $1', [userId]);
   return { accessToken, refreshToken: refresh.token };
 }

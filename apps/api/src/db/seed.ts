@@ -7,6 +7,7 @@ import { computeTotals, type LineInput } from '../lib/money.js';
 import { nextNumber } from '../lib/numbering.js';
 import { slugify } from '../lib/slug.js';
 import { logger } from '../lib/logger.js';
+import { writeAudit } from '../lib/audit.js';
 
 /**
  * Demo dataset for local development, E2E tests and screenshots.
@@ -460,7 +461,105 @@ export async function seed(): Promise<void> {
     })),
   });
 
+  await seedProviderLifecycle(db);
+
   logger.info('demo data seeded');
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Spreads the demo providers across the lifecycle so the admin panel has
+ * something to review rather than five identical rows.
+ *
+ * Written straight to the tables rather than through `applyProviderAction`:
+ * the seed has no admin session and no request context, and back-dating the
+ * history is the point — a queue where everything arrived in the same second
+ * cannot demonstrate "longest wait first".
+ */
+async function seedProviderLifecycle(db: Awaited<ReturnType<typeof getDb>>): Promise<void> {
+  const { rows: admin } = await db.query<{ id: string }>(
+    "SELECT id FROM users WHERE email = 'admin@ruvik.demo'",
+  );
+  const adminId = admin[0]?.id ?? null;
+
+  const event = async (
+    providerId: string,
+    axis: 'verification' | 'account',
+    action: string,
+    from: string,
+    to: string,
+    reason: string | null,
+    daysAgo: number,
+  ) => {
+    await db.query(
+      `INSERT INTO provider_status_events
+         (provider_id, actor_user_id, axis, action, from_status, to_status, reason,
+          metadata, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now() - ($9 || ' days')::interval)`,
+      [providerId, adminId, axis, action, from, to, reason,
+       JSON.stringify({ wasPublished: true, seeded: true }), String(daysAgo)],
+    );
+
+    // The same decision belongs in the audit trail. Writing only the provider
+    // history left the dashboard's activity feed empty while the drawer showed
+    // a full timeline of the same events — two views disagreeing about what
+    // had happened.
+    await writeAudit({
+      actorUserId: adminId,
+      actorRole: 'admin',
+      action: axis === 'verification' ? 'admin.provider_verification' : `admin.user_${to}`,
+      entityType: axis === 'verification' ? 'provider' : 'user',
+      entityId: providerId,
+      metadata: { action, status: to, previousStatus: from, providerId, reason },
+      createdAt: new Date(Date.now() - daysAgo * 86_400_000),
+    });
+  };
+
+  const idOf = async (email: string): Promise<string | null> => {
+    const { rows } = await db.query<{ id: string }>(
+      'SELECT p.id FROM providers p JOIN users u ON u.id = p.user_id WHERE u.email = $1',
+      [email],
+    );
+    return rows[0]?.id ?? null;
+  };
+
+  /* The two verified providers carry the decision that made them verified, so
+     the history panel is not empty on the happy path. */
+  for (const [email, days] of [
+    ['greenleaf@ruvik.demo', 96], ['sparktech@ruvik.demo', 74], ['nordic@ruvik.demo', 51],
+  ] as const) {
+    const id = await idOf(email);
+    if (!id) continue;
+    await event(id, 'verification', 'approve', 'pending', 'verified',
+      'Contractor licence and general liability certificate both checked against the state register.', days);
+  }
+
+  /* One provider has been waiting the longest and is the top of the queue. */
+  const coolbreeze = await idOf('coolbreeze@ruvik.demo');
+  if (coolbreeze) {
+    await db.query(
+      `UPDATE providers SET verification_status = 'pending',
+              verification_requested_at = now() - interval '9 days'
+        WHERE id = $1`,
+      [coolbreeze],
+    );
+  }
+
+  /* One is waiting on the provider rather than on us: the state that had no
+     representation before, and the reason 'rejected' used to absorb it. */
+  const brightcoat = await idOf('brightcoat@ruvik.demo');
+  if (brightcoat) {
+    const note = 'Liability certificate has expired. Send the current one and we will finish the review.';
+    await db.query(
+      `UPDATE providers SET verification_status = 'info_requested',
+              verification_note = $2,
+              verification_requested_at = now() - interval '4 days'
+        WHERE id = $1`,
+      [brightcoat, note],
+    );
+    await event(brightcoat, 'verification', 'request_info', 'pending', 'info_requested', note, 2);
+  }
 }
 
 /* -------------------------------------------------------------------------- */

@@ -1,359 +1,34 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Shell } from '../../components/Shell';
 import { ADMIN_TABS } from '../../components/nav';
 import { AccountAction } from '../../components/Shell';
 import { Icon } from '../../components/Icon';
 import {
   Button, Pill, StatusPill, Avatar, Stars, SkeletonList, ErrorState, EmptyState,
-  Modal, TextArea, Banner, Section, LoadMore, RefreshBar,
+  Modal, TextArea, Banner, LoadMore, RefreshBar, ConfirmDialog,
 } from '../../components/ui';
-import { useApi, usePagedApi, useDebounced } from '../../lib/useApi';
+import { usePagedApi, useDebounced } from '../../lib/useApi';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../state/ui';
-import { formatMoneyCompact, formatDate, formatRelative } from '../../lib/format';
+import { useAuth } from '../../state/auth';
+import { MIN_REASON_LENGTH } from '../../lib/providerLifecycle';
+import { formatDate, formatRelative } from '../../lib/format';
 
 /** Every admin list pages at the same size. */
 const PAGE_SIZE = 40;
 
-/* ============================== metrics ================================== */
+/* ============================= re-exports ================================ */
 
-interface Metrics {
-  users: { customers: number; providers: number; suspended: number; newLast30Days: number };
-  providers: { pendingVerification: number; verified: number; published: number };
-  commerce: {
-    jobs: number; completedJobs: number; quotes: number;
-    acceptedQuotes: number; invoices: number; gmvCents: number;
-  };
-  subscriptions: { active: number; pastDue: number; mrrCents: number };
-  moderation: { flaggedReviews: number; openTickets: number };
-  queue: Record<string, number>;
-}
+/**
+ * The Overview and the provider queue outgrew this file — both now carry a
+ * state machine, deep links and their own sub-components. They keep their
+ * public names here so the router does not have to care where they live.
+ */
+export { AdminDashboardScreen } from './AdminDashboardScreen';
+export { AdminProvidersScreen } from './AdminProvidersScreen';
 
-export function AdminDashboardScreen() {
-  const metrics = useApi(() => api.get<Metrics>('/admin/metrics'), []);
-
-  return (
-    <Shell title="Overview" tabs={ADMIN_TABS} action={<AccountAction />}>
-      {metrics.loading ? (
-        <SkeletonList rows={4} />
-      ) : metrics.error || !metrics.data ? (
-        <ErrorState message={metrics.error ?? 'Could not load metrics.'} onRetry={metrics.reload} />
-      ) : (
-        <>
-          {metrics.data.providers.pendingVerification > 0 && (
-            <div className="mb-4">
-              <Banner tone="warning">
-                {metrics.data.providers.pendingVerification} provider
-                {metrics.data.providers.pendingVerification === 1 ? '' : 's'} waiting for verification review.
-              </Banner>
-            </div>
-          )}
-
-          <Section title="Platform">
-            <div className="stat-grid">
-              <Tile value={metrics.data.users.customers} label="Customers" tone="brand" />
-              <Tile value={metrics.data.users.providers} label="Providers" tone="sage" />
-              <Tile value={metrics.data.users.newLast30Days} label="New (30 days)" />
-              <Tile value={metrics.data.users.suspended} label="Suspended" />
-            </div>
-          </Section>
-
-          <Section title="Revenue">
-            <div className="stat-grid">
-              <Tile
-                value={formatMoneyCompact(metrics.data.subscriptions.mrrCents)}
-                label="Monthly recurring"
-                tone="accent"
-              />
-              <Tile
-                value={formatMoneyCompact(metrics.data.commerce.gmvCents)}
-                label="Invoiced volume"
-              />
-              <Tile value={metrics.data.subscriptions.active} label="Active plans" />
-              <Tile value={metrics.data.subscriptions.pastDue} label="Past due" />
-            </div>
-          </Section>
-
-          <Section title="Marketplace activity">
-            <div className="list-group">
-              <MetricRow label="Jobs created" value={metrics.data.commerce.jobs} />
-              <MetricRow label="Jobs completed" value={metrics.data.commerce.completedJobs} />
-              <MetricRow label="Quotes sent" value={metrics.data.commerce.quotes} />
-              <MetricRow
-                label="Quotes accepted"
-                value={metrics.data.commerce.acceptedQuotes}
-                hint={
-                  metrics.data.commerce.quotes > 0
-                    ? `${Math.round((metrics.data.commerce.acceptedQuotes / metrics.data.commerce.quotes) * 100)}% conversion`
-                    : undefined
-                }
-              />
-              <MetricRow label="Invoices issued" value={metrics.data.commerce.invoices} />
-            </div>
-          </Section>
-
-          <Section title="Background jobs">
-            <div className="list-group">
-              {Object.entries(metrics.data.queue).length === 0 ? (
-                <div className="list-item" style={{ cursor: 'default' }}>
-                  <span className="grow small muted">Queue is empty</span>
-                </div>
-              ) : (
-                Object.entries(metrics.data.queue).map(([status, count]) => (
-                  <div key={status} className="list-item" style={{ cursor: 'default' }}>
-                    <span className="grow small" style={{ textTransform: 'capitalize' }}>{status}</span>
-                    <Pill tone={status === 'dead' || status === 'failed' ? 'danger' : 'neutral'}>
-                      {count}
-                    </Pill>
-                  </div>
-                ))
-              )}
-            </div>
-          </Section>
-
-          <Section title="Moderation queue">
-            <div className="list-group">
-              <MetricRow label="Flagged reviews" value={metrics.data.moderation.flaggedReviews} />
-              <MetricRow label="Open support tickets" value={metrics.data.moderation.openTickets} />
-            </div>
-          </Section>
-        </>
-      )}
-    </Shell>
-  );
-}
-
-function Tile({
-  value, label, tone,
-}: { value: number | string; label: string; tone?: 'brand' | 'sage' | 'accent' }) {
-  return (
-    <div className={`stat-tile${tone ? ` stat-tile--${tone}` : ''}`} style={{ cursor: 'default' }}>
-      <span className="stat-tile__value tabular">{value}</span>
-      <span className="stat-tile__label">{label}</span>
-    </div>
-  );
-}
-
-function MetricRow({ label, value, hint }: { label: string; value: number; hint?: string }) {
-  return (
-    <div className="list-item" style={{ cursor: 'default' }}>
-      <div className="grow">
-        <span className="small">{label}</span>
-        {hint && <div className="tiny subtle">{hint}</div>}
-      </div>
-      <span className="strong tabular">{value}</span>
-    </div>
-  );
-}
-
-/* ============================== providers ================================ */
-
-interface AdminProvider {
-  id: string;
-  businessName: string;
-  slug: string;
-  city: string | null;
-  verificationStatus: string;
-  isPublished: boolean;
-  ratingAvg: number;
-  ratingCount: number;
-  completedJobs: number;
-  serviceCount: number;
-  subscriptionStatus: string | null;
-  createdAt: string;
-  owner: { email: string; fullName: string; status: string };
-}
-
-const VERIFICATION_FILTERS = [
-  { value: '', label: 'All' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'verified', label: 'Verified' },
-  { value: 'unverified', label: 'Unverified' },
-  { value: 'rejected', label: 'Rejected' },
-];
-
-export function AdminProvidersScreen() {
-  const { notify } = useToast();
-  const [filter, setFilter] = useState('');
-  const [reviewing, setReviewing] = useState<AdminProvider | null>(null);
-
-  const providers = usePagedApi<AdminProvider>(
-    (cursor) => api.get('/admin/providers', {
-      verificationStatus: filter || undefined, cursor: cursor ?? undefined, limit: PAGE_SIZE,
-    }),
-    [filter],
-  );
-
-  return (
-    <Shell title="Providers" tabs={ADMIN_TABS} action={<AccountAction />}>
-      <div className="chip-row mb-4">
-        {VERIFICATION_FILTERS.map((option) => (
-          <button
-            key={option.value || 'all'}
-            type="button"
-            className={`chip${filter === option.value ? ' is-active' : ''}`}
-            onClick={() => setFilter(option.value)}
-            aria-pressed={filter === option.value}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
-      {providers.loading ? (
-        <SkeletonList rows={5} />
-      ) : providers.error ? (
-        <ErrorState message={providers.error} onRetry={providers.reload} />
-      ) : !providers.items.length ? (
-        <EmptyState icon="briefcase" title="No providers here" body="Try another filter." />
-      ) : (
-        <div className="stack results-stack" aria-busy={providers.refreshing}>
-          <RefreshBar active={providers.refreshing} />
-          {providers.items.map((provider) => (
-            <button
-              key={provider.id}
-              type="button"
-              className="card-button"
-              onClick={() => setReviewing(provider)}
-            >
-              <div className="row" style={{ alignItems: 'flex-start', marginBottom: 'var(--s2)' }}>
-                <Avatar name={provider.businessName} />
-                <div className="grow">
-                  <div className="list-item__title truncate">{provider.businessName}</div>
-                  <div className="list-item__meta truncate">
-                    {provider.owner.email}{provider.city ? ` · ${provider.city}` : ''}
-                  </div>
-                </div>
-                <StatusPill status={provider.verificationStatus} />
-              </div>
-
-              <div className="row row--wrap" style={{ gap: 'var(--s3)' }}>
-                <span className="tiny muted">{provider.serviceCount} listings</span>
-                <span className="tiny muted">{provider.completedJobs} jobs</span>
-                <Stars rating={provider.ratingAvg} count={provider.ratingCount} size={12} />
-                {provider.subscriptionStatus && (
-                  <Pill tone={provider.subscriptionStatus === 'active' ? 'success' : 'warning'}>
-                    {provider.subscriptionStatus}
-                  </Pill>
-                )}
-                {!provider.isPublished && <Pill tone="neutral">Unlisted</Pill>}
-              </div>
-            </button>
-          ))}
-
-          <LoadMore
-            hasMore={providers.hasMore}
-            loading={providers.loadingMore}
-            error={providers.moreError}
-            onLoadMore={providers.loadMore}
-            count={providers.items.length}
-            pageSize={PAGE_SIZE}
-          />
-        </div>
-      )}
-
-      <VerificationModal
-        provider={reviewing}
-        onClose={() => setReviewing(null)}
-        onDone={() => {
-          setReviewing(null);
-          notify('Verification updated.', 'success');
-          providers.reload();
-        }}
-      />
-    </Shell>
-  );
-}
-
-function VerificationModal({
-  provider, onClose, onDone,
-}: { provider: AdminProvider | null; onClose: () => void; onDone: () => void }) {
-  const { notify } = useToast();
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const decide = async (status: string) => {
-    if (!provider) return;
-    setBusy(status);
-    try {
-      await api.post(`/admin/providers/${provider.id}/verification`, {
-        status, note: note.trim() || undefined,
-      });
-      setNote('');
-      onDone();
-    } catch (err) {
-      notify(
-        err instanceof ApiError ? err.message : 'Could not update verification.',
-        'error',
-      );
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  if (!provider) return null;
-
-  return (
-    <Modal open title={provider.businessName} onClose={onClose}>
-      <div className="stack stack--tight mb-4">
-        <Row label="Owner" value={provider.owner.fullName} />
-        <Row label="Email" value={provider.owner.email} />
-        <Row label="City" value={provider.city ?? '—'} />
-        <Row label="Listings" value={String(provider.serviceCount)} />
-        <Row label="Jobs completed" value={String(provider.completedJobs)} />
-        <Row label="Joined" value={formatDate(provider.createdAt)} />
-        <Row label="Current status" value={provider.verificationStatus} />
-      </div>
-
-      <Banner tone="info">
-        Verification is a trust signal shown publicly. Confirm licence and insurance
-        documents out of band before approving.
-      </Banner>
-
-      <div style={{ height: 'var(--s4)' }} />
-
-      <TextArea
-        label="Note (shown to the provider)"
-        placeholder="Licence and public liability insurance checked."
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        maxLength={500}
-      />
-
-      <div className="stack">
-        <Button
-          block
-          icon="shield"
-          loading={busy === 'verified'}
-          disabled={busy !== null}
-          onClick={() => decide('verified')}
-        >
-          Approve verification
-        </Button>
-        <Button
-          block
-          variant="secondary"
-          loading={busy === 'pending'}
-          disabled={busy !== null}
-          onClick={() => decide('pending')}
-        >
-          Mark as pending review
-        </Button>
-        <Button
-          block
-          variant="danger"
-          loading={busy === 'rejected'}
-          disabled={busy !== null}
-          onClick={() => decide('rejected')}
-        >
-          Reject
-        </Button>
-        <Button variant="ghost" block onClick={onClose}>Close</Button>
-      </div>
-    </Modal>
-  );
-}
-
+/** Label/value line used by the user and review detail modals. */
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="row row--between">
@@ -371,6 +46,8 @@ interface AdminUser {
   fullName: string;
   role: string;
   status: string;
+  statusReason: string | null;
+  statusChangedAt: string | null;
   mfaEnabled: boolean;
   lastLoginAt: string | null;
   createdAt: string;
@@ -379,18 +56,30 @@ interface AdminUser {
 
 export function AdminUsersScreen() {
   const { notify } = useToast();
+  // Filters live in the URL so an Overview tile can link straight to the exact
+  // list it counted, and so a filtered view is a shareable link.
+  const [params, setParams] = useSearchParams();
+  const role = params.get('role') ?? '';
+  const status = params.get('status') ?? '';
   const [query, setQuery] = useState('');
-  const [role, setRole] = useState('');
   const [target, setTarget] = useState<AdminUser | null>(null);
   const debounced = useDebounced(query, 300);
 
   const users = usePagedApi<AdminUser>(
     (cursor) => api.get('/admin/users', {
-      q: debounced || undefined, role: role || undefined,
+      q: debounced || undefined,
+      role: role || undefined,
+      status: status || undefined,
       cursor: cursor ?? undefined, limit: PAGE_SIZE,
     }),
-    [debounced, role],
+    [debounced, role, status],
   );
+
+  const setParam = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value); else next.delete(key);
+    setParams(next, { replace: true });
+  };
 
   return (
     <Shell title="Users" tabs={ADMIN_TABS} action={<AccountAction />}>
@@ -406,9 +95,9 @@ export function AdminUsersScreen() {
         />
       </div>
 
-      <div className="chip-row mb-4">
+      <div className="chip-row mb-3" role="group" aria-label="Filter by role">
         {[
-          { value: '', label: 'All' },
+          { value: '', label: 'All roles' },
           { value: 'customer', label: 'Customers' },
           { value: 'provider', label: 'Providers' },
           { value: 'admin', label: 'Admins' },
@@ -417,8 +106,27 @@ export function AdminUsersScreen() {
             key={option.value || 'all'}
             type="button"
             className={`chip${role === option.value ? ' is-active' : ''}`}
-            onClick={() => setRole(option.value)}
+            onClick={() => setParam('role', option.value)}
             aria-pressed={role === option.value}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="chip-row mb-4" role="group" aria-label="Filter by account status">
+        {[
+          { value: '', label: 'Any status' },
+          { value: 'active', label: 'Active' },
+          { value: 'suspended', label: 'Suspended' },
+          { value: 'blocked', label: 'Blocked' },
+        ].map((option) => (
+          <button
+            key={option.value || 'any'}
+            type="button"
+            className={`chip${status === option.value ? ' is-active' : ''}`}
+            onClick={() => setParam('status', option.value)}
+            aria-pressed={status === option.value}
           >
             {option.label}
           </button>
@@ -451,7 +159,9 @@ export function AdminUsersScreen() {
                 <div className="list-item__meta truncate">{user.email}</div>
               </div>
               <div className="list-item__trail">
-                <Pill tone={user.status === 'active' ? 'success' : 'danger'}>{user.status}</Pill>
+                <Pill tone={user.status === 'active' ? 'success' : 'danger'}>
+                  {user.status.replace(/_/g, ' ')}
+                </Pill>
                 <div className="tiny subtle" style={{ marginTop: 4, textTransform: 'capitalize' }}>
                   {user.role}
                 </div>
@@ -484,28 +194,36 @@ function UserModal({
   user, onClose, onDone,
 }: { user: AdminUser | null; onClose: () => void; onDone: () => void }) {
   const { notify } = useToast();
+  const { sessionAal } = useAuth();
   const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<UserStatusAction | null>(null);
 
-  const setStatus = async (status: 'active' | 'suspended') => {
+  // Every state-changing admin route is gated on requireMfa, so say so before
+  // a reason is typed rather than after a 403 comes back.
+  const mfaReady = sessionAal === 'mfa';
+  const tooShort = reason.trim().length < MIN_REASON_LENGTH;
+
+  const setStatus = async (action: UserStatusAction) => {
     if (!user) return;
-    if (!reason.trim()) {
-      notify('Give a reason — it is written to the audit log and shown to the user.', 'error');
-      return;
-    }
-    setBusy(true);
+    setBusy(action.status);
+    setConfirming(null);
     try {
-      await api.post(`/admin/users/${user.id}/status`, { status, reason: reason.trim() });
+      await api.post(`/admin/users/${user.id}/status`, {
+        status: action.status, reason: reason.trim(),
+      });
       setReason('');
       onDone();
     } catch (err) {
       notify(err instanceof ApiError ? err.message : 'Could not update the user.', 'error');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   if (!user) return null;
+
+  const actions = userStatusActions(user.status);
 
   return (
     <Modal open title={user.fullName} onClose={onClose}>
@@ -519,35 +237,140 @@ function UserModal({
         {user.provider && <Row label="Business" value={user.provider.businessName} />}
       </div>
 
-      <Banner tone="warning">
-        Suspending signs the user out everywhere immediately and hides their listings.
-        This action requires two-factor and is written to the audit log.
-      </Banner>
+      {user.statusReason && user.status !== 'active' && (
+        <div className="mb-4">
+          <Banner tone="info">
+            <strong>Reason on file:</strong> {user.statusReason}
+          </Banner>
+        </div>
+      )}
 
-      <div style={{ height: 'var(--s4)' }} />
+      {!mfaReady && (
+        <div className="mb-4">
+          <Banner tone="warning">
+            Changing an account status needs a two-factor session. Turn on two-factor
+            in your profile and sign in again — until then these actions stay disabled.
+          </Banner>
+        </div>
+      )}
 
       <TextArea
         label="Reason (required)"
-        placeholder="Repeated policy violations after two warnings."
+        hint={`At least ${MIN_REASON_LENGTH} characters. Written to the audit log and shown to the user.`}
+        error={reason.length > 0 && tooShort
+          ? `A bit more detail — ${MIN_REASON_LENGTH} characters minimum.`
+          : undefined}
+        placeholder="Repeated policy violations after two written warnings."
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         maxLength={500}
+        disabled={!mfaReady}
       />
 
       <div className="stack">
-        {user.status === 'active' ? (
-          <Button block variant="danger" loading={busy} onClick={() => setStatus('suspended')}>
-            Suspend account
-          </Button>
-        ) : (
-          <Button block loading={busy} onClick={() => setStatus('active')}>
-            Reinstate account
-          </Button>
-        )}
+        {actions.map((action) => (
+          <div key={action.status} className="action-list__item">
+            <Button
+              block
+              variant={action.tone}
+              loading={busy === action.status}
+              disabled={!mfaReady || busy !== null || tooShort}
+              onClick={() => (action.confirmBody ? setConfirming(action) : setStatus(action))}
+            >
+              {action.label}
+            </Button>
+            <p className="tiny subtle action-list__hint">{action.description}</p>
+          </div>
+        ))}
         <Button variant="ghost" block onClick={onClose}>Close</Button>
       </div>
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title={confirming?.label ?? ''}
+        body={confirming?.confirmBody ?? ''}
+        confirmLabel={confirming?.label ?? 'Confirm'}
+        danger={confirming?.tone === 'danger'}
+        loading={busy !== null}
+        onConfirm={() => confirming && setStatus(confirming)}
+        onCancel={() => setConfirming(null)}
+      />
     </Modal>
   );
+}
+
+/* ------------------------- account status actions ------------------------- */
+
+interface UserStatusAction {
+  status: 'active' | 'suspended' | 'blocked';
+  label: string;
+  description: string;
+  tone: 'primary' | 'secondary' | 'danger';
+  /** Present when the action needs a second, deliberate confirmation. */
+  confirmBody?: string;
+}
+
+/**
+ * What is legal from each account status. This mirrors the account axis of the
+ * provider lifecycle; a customer has no verification axis, so for them it is
+ * the whole story. Offering "Suspend" on an already-suspended account was the
+ * kind of dead control this replaces.
+ */
+function userStatusActions(status: string): UserStatusAction[] {
+  switch (status) {
+    case 'active':
+      return [
+        {
+          status: 'suspended',
+          label: 'Suspend account',
+          description: 'Temporary. Signs them out everywhere and hides any listings.',
+          tone: 'danger',
+          confirmBody:
+            'Every session ends immediately. Suspension is meant to be undone — '
+            + 'use it for anything you expect to reverse.',
+        },
+        {
+          status: 'blocked',
+          label: 'Block permanently',
+          description: 'Terminal. Sign-in is refused until an admin unblocks them.',
+          tone: 'danger',
+          confirmBody:
+            'This is the strongest action available. Use suspension unless the '
+            + 'decision is final.',
+        },
+      ];
+    case 'suspended':
+      return [
+        {
+          status: 'active',
+          label: 'Reinstate account',
+          description: 'Restores access and anything the suspension took down.',
+          tone: 'primary',
+        },
+        {
+          status: 'blocked',
+          label: 'Block permanently',
+          description: 'Escalates the suspension to a permanent block.',
+          tone: 'danger',
+          confirmBody: 'Escalating a suspension to a permanent block. Both stay in the history.',
+        },
+      ];
+    case 'blocked':
+      return [
+        {
+          status: 'active',
+          label: 'Unblock account',
+          description: 'Restores access. The block stays in the history.',
+          tone: 'secondary',
+          confirmBody:
+            'Reversing a permanent block. The original decision and your reason '
+            + 'both remain on the record.',
+        },
+      ];
+    default:
+      // pending_deletion / deleted: the record is read-only.
+      return [];
+  }
 }
 
 /* =============================== reviews ================================= */

@@ -46,6 +46,28 @@ export function formatRelative(input: string | null | undefined): string {
   return formatDate(input);
 }
 
+/**
+ * How long something has been waiting, always as an elapsed span.
+ *
+ * `formatRelative` degrades to an absolute date past a week, which is right for
+ * "last seen" and wrong for a queue: "waiting Aug 25" makes the reader do the
+ * subtraction, and that subtraction is exactly what the queue is sorted on.
+ */
+export function formatWaiting(input: string | null | undefined): string {
+  if (!input) return '';
+  const ms = Date.now() - new Date(input).getTime();
+  if (Number.isNaN(ms)) return '';
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return 'less than an hour';
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.floor(hours / 24);
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'}`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 9) return `${weeks} weeks`;
+  const months = Math.floor(days / 30);
+  return `${months} month${months === 1 ? '' : 's'}`;
+}
+
 export function formatDuration(minutes: number | null | undefined): string {
   if (!minutes) return '';
   if (minutes < 60) return `${minutes} min`;

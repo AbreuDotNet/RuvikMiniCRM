@@ -1277,3 +1277,74 @@
   color: var(--accent);
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------- admin: attention --- */
+
+/* One row per thing that needs doing. Rendered as a link, because a count an
+   admin cannot open is a count they have to go and find by hand. */
+.attention {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-decoration: none;
+  min-height: 48px;
+}
+.attention:hover { text-decoration: none; border-color: var(--border-strong); }
+.attention--warning { border-left-color: var(--warning); background: var(--warning-soft); }
+.attention--danger  { border-left-color: var(--danger);  background: var(--danger-soft); }
+.attention--clear {
+  border-left-color: var(--success);
+  background: var(--success-soft);
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------ admin: state summary --- */
+
+/* The one place in the drawer that answers "what is this account, right now,
+   and why". Everything below it is detail. */
+.state-summary {
+  padding: var(--s4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+/* -------------------------------------------------- admin: action list --- */
+
+/* Each action carries one line saying what it actually does. Buttons whose
+   consequences are invisible are how an admin blocks somebody by accident. */
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+.action-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+.action-list__hint {
+  margin: 0;
+  padding: 0 var(--s1);
+  line-height: 1.4;
+}
+
+/* An unavailable action must not look like an available one.
+   The global `opacity: 0.55` is enough for a single greyed-out submit button,
+   but not for a stack of filled buttons: a 55%-opacity danger fill still reads
+   as a red button somebody can press. These drop the fill entirely, so a
+   locked action bar is obviously a locked action bar at a glance. */
+.action-list__item .btn:disabled {
+  opacity: 1;
+  background: var(--bg-inset);
+  color: var(--text-subtle);
+  border-color: var(--border);
+  box-shadow: none;
+}
+.action-list__item .btn:disabled + .action-list__hint { opacity: 0.7; }

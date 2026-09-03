@@ -70,6 +70,13 @@ export async function issueRefreshToken(opts: {
   replacesId?: string;
   ip?: string;
   userAgent?: string;
+  /**
+   * Auth level of the session this token belongs to. It is a property of the
+   * session, not of the account, so it has to travel with the refresh token:
+   * re-deriving it at refresh time from users.mfa_enabled would silently
+   * elevate a session that never passed a TOTP challenge.
+   */
+  aal?: 'aal1' | 'mfa';
 }): Promise<IssuedRefresh> {
   const db = await getDb();
   const token = randomToken(48);
@@ -77,10 +84,13 @@ export async function issueRefreshToken(opts: {
   const expiresAt = new Date(Date.now() + env.REFRESH_TTL_SECONDS * 1000);
 
   const { rows } = await db.query<{ id: string; family_id: string }>(
-    `INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at, user_agent, ip)
-     VALUES ($1, $2, COALESCE($3::uuid, gen_random_uuid()), $4, $5, $6)
+    `INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at, user_agent, ip, aal)
+     VALUES ($1, $2, COALESCE($3::uuid, gen_random_uuid()), $4, $5, $6, $7)
      RETURNING id, family_id`,
-    [opts.userId, tokenHash, opts.familyId ?? null, expiresAt, opts.userAgent ?? null, opts.ip ?? null],
+    [
+      opts.userId, tokenHash, opts.familyId ?? null, expiresAt,
+      opts.userAgent ?? null, opts.ip ?? null, opts.aal ?? 'aal1',
+    ],
   );
 
   if (opts.replacesId) {
@@ -95,6 +105,8 @@ export async function issueRefreshToken(opts: {
 export interface RotationResult {
   userId: string;
   refresh: IssuedRefresh;
+  /** Carried across rotation so an MFA session stays an MFA session. */
+  aal: 'aal1' | 'mfa';
 }
 
 /**
@@ -117,8 +129,10 @@ export async function rotateRefreshToken(
     revoked_at: string | null;
     replaced_by: string | null;
     status: string;
+    aal: 'aal1' | 'mfa';
   }>(
-    `SELECT rt.id, rt.user_id, rt.family_id, rt.expires_at, rt.revoked_at, rt.replaced_by, u.status
+    `SELECT rt.id, rt.user_id, rt.family_id, rt.expires_at, rt.revoked_at, rt.replaced_by,
+            rt.aal, u.status
        FROM refresh_tokens rt
        JOIN users u ON u.id = rt.user_id
       WHERE rt.token_hash = $1`,
@@ -150,8 +164,9 @@ export async function rotateRefreshToken(
     replacesId: row.id,
     ip: ctx.ip,
     userAgent: ctx.userAgent,
+    aal: row.aal,
   });
-  return { userId: row.user_id, refresh };
+  return { userId: row.user_id, refresh, aal: row.aal };
 }
 
 export async function revokeFamily(familyId: string, reason: string): Promise<void> {
