@@ -39,6 +39,7 @@ import {
 
 import './styles/theme.css';
 import './styles/app.css';
+import './styles/receipt.css';
 
 function FullScreenLoader() {
   return (

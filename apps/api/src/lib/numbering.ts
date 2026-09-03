@@ -1,6 +1,8 @@
 import type { Queryable } from '../db/index.js';
 
-const PREFIX: Record<string, string> = { quote: 'Q', invoice: 'INV', job: 'JOB' };
+const PREFIX: Record<string, string> = {
+  quote: 'Q', invoice: 'INV', job: 'JOB', receipt: 'RCP',
+};
 
 /**
  * Per-provider, per-year document numbers (Q-2026-0001).
@@ -13,7 +15,7 @@ const PREFIX: Record<string, string> = { quote: 'Q', invoice: 'INV', job: 'JOB' 
 export async function nextNumber(
   client: Queryable,
   providerId: string,
-  kind: 'quote' | 'invoice' | 'job',
+  kind: 'quote' | 'invoice' | 'job' | 'receipt',
   now = new Date(),
 ): Promise<string> {
   const period = String(now.getUTCFullYear());

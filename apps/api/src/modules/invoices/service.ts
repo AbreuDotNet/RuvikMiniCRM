@@ -253,7 +253,8 @@ export async function getInvoice(invoiceId: string, viewer: { providerId?: strin
       [invoiceId],
     ),
     db.query<any>(
-      `SELECT amount_cents, status, method, paid_at, created_at
+      `SELECT id, amount_cents, status, method, paid_at, created_at,
+              receipt_number, receipt_printed_at
          FROM payments WHERE invoice_id = $1 ORDER BY created_at DESC`,
       [invoiceId],
     ),
@@ -309,6 +310,11 @@ export async function getInvoice(invoiceId: string, viewer: { providerId?: strin
       lineTaxCents: i.line_tax_cents,
     })),
     payments: payments.rows.map((p) => ({
+      // The id is what a reprint addresses; without it a receipt can be
+      // issued once and never recovered.
+      id: p.id,
+      receiptNumber: p.receipt_number,
+      receiptPrintedAt: p.receipt_printed_at,
       amountCents: p.amount_cents,
       status: p.status,
       method: p.method,
@@ -329,8 +335,14 @@ export async function recordPayment(
 
   return db.tx(async (c) => {
     const { rows } = await c.query<any>(
+      // FOR UPDATE: the overpayment check below reads amount_paid_cents and
+      // writes it back. Without the lock two concurrent payments both read the
+      // old balance, both pass the check, and the invoice ends up overpaid.
+      // The idempotency middleware does not cover this — it stops a repeat of
+      // the *same* request, not two different ones arriving together.
       `SELECT id, status, total_cents, amount_paid_cents, number, currency
-         FROM invoices WHERE id = $1 AND provider_id = $2`,
+         FROM invoices WHERE id = $1 AND provider_id = $2
+         FOR UPDATE`,
       [invoiceId, providerId],
     );
     const inv = rows[0];
@@ -353,18 +365,26 @@ export async function recordPayment(
         WHERE id = $1`,
       [invoiceId, newPaid, status],
     );
-    await c.query(
+    // The receipt number is claimed inside this transaction, alongside the
+    // payment row. Issuing it later would let a payment exist with no receipt
+    // if the process died in between.
+    const receiptNumber = await nextNumber(c, providerId, 'receipt');
+
+    const { rows: payRows } = await c.query<{ id: string; paid_at: string }>(
       `INSERT INTO payments (provider_id, invoice_id, kind, amount_cents, currency, status,
-                             method, external_ref, paid_at)
-       VALUES ($1,$2,'invoice',$3,$4,'succeeded',$5,$6, now())`,
+                             method, external_ref, paid_at, receipt_number)
+       VALUES ($1,$2,'invoice',$3,$4,'succeeded',$5,$6, now(), $7)
+       RETURNING id, paid_at`,
       [providerId, invoiceId, input.amountCents, inv.currency, input.method ?? 'manual',
-       input.reference ?? null],
+       input.reference ?? null, receiptNumber],
     );
 
     await writeAudit({
       actorUserId, actorRole: 'provider', action: 'invoice.payment_recorded',
       entityType: 'invoice', entityId: invoiceId,
-      metadata: { number: inv.number, amountCents: input.amountCents, status },
+      metadata: {
+        number: inv.number, amountCents: input.amountCents, status, receiptNumber,
+      },
     }, c);
 
     return {
@@ -372,6 +392,15 @@ export async function recordPayment(
       status,
       amountPaidCents: newPaid,
       balanceCents: inv.total_cents - newPaid,
+      // Returned so the caller can print immediately without a second lookup —
+      // the till is the one moment the customer is still standing there.
+      payment: {
+        id: payRows[0].id,
+        receiptNumber,
+        amountCents: input.amountCents,
+        method: input.method ?? 'manual',
+        paidAt: payRows[0].paid_at,
+      },
     };
   });
 }
@@ -427,4 +456,136 @@ export async function voidInvoice(
     // creation guard applies, so the two cannot disagree.
     return { id: invoiceId, status: 'void' as const, quoteId: inv.quote_id };
   });
+}
+
+/**
+ * Builds the payload for one payment receipt.
+ *
+ * The server assembles it, never the client. A receipt is a financial record
+ * and the figures on it have to match the invoice they settle — letting the
+ * screen compose its own would make the printed slip and the ledger two
+ * separate sources of truth.
+ *
+ * Reprinting returns the same document: the number, the timestamp and the
+ * balance as it stood after that payment are all read back from the row, not
+ * recomputed from today's state. A customer holding two copies of RCP-2026-0007
+ * must see identical figures on both.
+ */
+export async function getPaymentReceipt(
+  invoiceId: string,
+  paymentId: string,
+  viewer: { providerId?: string; userId?: string },
+) {
+  const db = await getDb();
+
+  const { rows } = await db.query<any>(
+    `SELECT pay.id, pay.receipt_number, pay.amount_cents, pay.currency, pay.method,
+            pay.external_ref, pay.paid_at, pay.receipt_printed_at,
+            i.id AS invoice_id, i.number AS invoice_number, i.provider_id,
+            i.subtotal_cents, i.discount_cents, i.tax_cents, i.total_cents,
+            i.taxable_base_cents, i.untaxed_base_cents, i.tax_jurisdiction,
+            i.issue_date, j.customer_user_id, j.title AS job_title,
+            c.full_name AS client_name,
+            p.business_name, p.tagline, p.phone_e164 AS provider_phone,
+            p.address_line AS provider_address, p.city AS provider_city,
+            p.region AS provider_region, p.postal_code AS provider_postal,
+            p.tax_state
+       FROM payments pay
+       JOIN invoices i ON i.id = pay.invoice_id
+       LEFT JOIN jobs j ON j.id = i.job_id
+       JOIN clients c ON c.id = i.client_id
+       JOIN providers p ON p.id = i.provider_id
+      WHERE pay.id = $1 AND pay.invoice_id = $2`,
+    [paymentId, invoiceId],
+  );
+  const r = rows[0];
+  if (!r) throw notFound('That receipt was not found.');
+
+  const isOwner = viewer.providerId && r.provider_id === viewer.providerId;
+  const isCustomer = viewer.userId && r.customer_user_id === viewer.userId;
+  // 404 rather than 403, like every other cross-tenant read here: a 403 would
+  // confirm the receipt exists.
+  if (!isOwner && !isCustomer) throw notFound('That receipt was not found.');
+
+  // Balance as at this payment: everything succeeded up to and including it.
+  const { rows: priorRows } = await db.query<{ paid: string }>(
+    `SELECT COALESCE(sum(amount_cents), 0)::text AS paid
+       FROM payments
+      WHERE invoice_id = $1 AND status = 'succeeded'
+        AND (paid_at < $2 OR (paid_at = $2 AND id <= $3))`,
+    [invoiceId, r.paid_at, paymentId],
+  );
+  const paidToDate = Number(priorRows[0].paid);
+
+  const { rows: items } = await db.query<any>(
+    `SELECT description, quantity, unit_price_cents, line_total_cents,
+            tax_treatment, tax_reason, line_tax_cents
+       FROM invoice_items WHERE invoice_id = $1 ORDER BY sort_order`,
+    [invoiceId],
+  );
+
+  return {
+    receiptNumber: r.receipt_number,
+    paymentId: r.id,
+    paidAt: r.paid_at,
+    printedAt: r.receipt_printed_at,
+    method: r.method,
+    reference: r.external_ref,
+    currency: r.currency,
+
+    business: {
+      name: r.business_name,
+      tagline: r.tagline,
+      addressLine: r.provider_address,
+      city: r.provider_city,
+      region: r.provider_region,
+      postalCode: r.provider_postal,
+      phone: r.provider_phone,
+    },
+    customerName: r.client_name,
+
+    invoice: {
+      id: r.invoice_id,
+      number: r.invoice_number,
+      issueDate: r.issue_date,
+      jobTitle: r.job_title,
+      subtotalCents: r.subtotal_cents,
+      discountCents: r.discount_cents,
+      taxCents: r.tax_cents,
+      totalCents: r.total_cents,
+      taxableBaseCents: r.taxable_base_cents,
+      untaxedBaseCents: r.untaxed_base_cents,
+      taxJurisdiction: r.tax_jurisdiction,
+    },
+    lines: items.map((i) => ({
+      description: i.description,
+      quantity: Number(i.quantity),
+      unitPriceCents: i.unit_price_cents,
+      lineTotalCents: i.line_total_cents,
+      taxTreatment: i.tax_treatment,
+      taxReason: i.tax_reason,
+      lineTaxCents: i.line_tax_cents,
+    })),
+
+    /** What this slip is proof of. */
+    amountPaidCents: r.amount_cents,
+    /** Everything paid on the invoice up to and including this payment. */
+    paidToDateCents: paidToDate,
+    balanceCents: Math.max(0, r.total_cents - paidToDate),
+  };
+}
+
+/** Records that a receipt reached paper, so an unprinted payment is visible. */
+export async function markReceiptPrinted(
+  providerId: string,
+  paymentId: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    // First print only: the timestamp answers "did the customer get a copy",
+    // and a reprint does not change that answer.
+    `UPDATE payments SET receipt_printed_at = COALESCE(receipt_printed_at, now())
+      WHERE id = $1 AND provider_id = $2`,
+    [paymentId, providerId],
+  );
 }

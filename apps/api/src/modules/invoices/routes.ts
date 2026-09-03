@@ -171,3 +171,36 @@ invoicesRouter.post(
     res.json({ ...result, message: 'Invoice voided.' });
   }),
 );
+
+/**
+ * The payload for one payment receipt.
+ *
+ * Readable by the provider who issued it and by the customer it was issued to
+ * — a receipt is the customer's proof of payment, so locking them out of it
+ * would defeat the point.
+ */
+invoicesRouter.get(
+  '/:id/receipts/:paymentId',
+  authenticate,
+  validate(z.object({ id: uuidSchema, paymentId: uuidSchema }), 'params'),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await svc.getPaymentReceipt(req.params.id, req.params.paymentId, {
+        providerId: req.auth!.role === 'provider' ? req.auth!.providerId : undefined,
+        userId: req.auth!.userId,
+      }),
+    );
+  }),
+);
+
+/** Records that the receipt reached paper. Provider-only: they hold the printer. */
+invoicesRouter.post(
+  '/:id/receipts/:paymentId/printed',
+  authenticate,
+  requireProvider,
+  validate(z.object({ id: uuidSchema, paymentId: uuidSchema }), 'params'),
+  asyncHandler(async (req, res) => {
+    await svc.markReceiptPrinted(tenantId(req), req.params.paymentId);
+    res.json({ ok: true });
+  }),
+);

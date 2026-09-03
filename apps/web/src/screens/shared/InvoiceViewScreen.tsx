@@ -11,6 +11,15 @@ import { api, ApiError, newIdempotencyKey } from '../../lib/api';
 import { useAuth } from '../../state/auth';
 import { useToast } from '../../state/ui';
 import { formatMoney, formatDate } from '../../lib/format';
+import { printReceipt } from '../../lib/printReceipt';
+import type { ReceiptData } from '../../components/Receipt';
+
+/** What POST /invoices/:id/payments returns. */
+interface PaymentResult {
+  status: string;
+  balanceCents: number;
+  payment: { id: string; receiptNumber: string; amountCents: number; method: string; paidAt: string };
+}
 
 interface InvoiceDetail {
   id: string;
@@ -37,7 +46,15 @@ interface InvoiceDetail {
   provider: { businessName: string; tagline: string | null; city: string | null; phone: string | null };
   client: { fullName: string; email?: string; phone?: string; city: string | null };
   lines: DocumentLine[];
-  payments: Array<{ amountCents: number; status: string; method: string | null; paidAt: string | null }>;
+  payments: Array<{
+    id?: string;
+    receiptNumber?: string | null;
+    receiptPrintedAt?: string | null;
+    amountCents: number;
+    status: string;
+    method: string | null;
+    paidAt: string | null;
+  }>;
 }
 
 export function InvoiceViewScreen() {
@@ -65,6 +82,18 @@ export function InvoiceViewScreen() {
   const isProvider = user?.role === 'provider';
   const canSend = isProvider && inv.status === 'draft';
   const canRecordPayment = isProvider && ['sent', 'partially_paid', 'overdue'].includes(inv.status);
+
+  /** Reprints an existing receipt. Reprinting reissues nothing: same number, same figures. */
+  const reprint = async (paymentId: string) => {
+    try {
+      const receipt = await api.get<ReceiptData>(
+        `/invoices/${inv.id}/receipts/${paymentId}`,
+      );
+      await printReceipt(receipt);
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : 'We could not print that receipt.', 'error');
+    }
+  };
 
   const send = async () => {
     setBusy(true);
@@ -125,11 +154,25 @@ export function InvoiceViewScreen() {
           <h3 className="section__title mb-3">Payments</h3>
           <div className="list-group">
             {inv.payments.map((payment, index) => (
-              <div key={index} className="list-item" style={{ cursor: 'default' }}>
+              <div key={payment.id ?? index} className="list-item" style={{ cursor: 'default' }}>
                 <div className="grow">
                   <div className="strong small tabular">{formatMoney(payment.amountCents, inv.currency)}</div>
-                  <div className="tiny subtle">{payment.method ?? 'Payment'} · {formatDate(payment.paidAt)}</div>
+                  <div className="tiny subtle">
+                    {payment.method ?? 'Payment'} · {formatDate(payment.paidAt)}
+                    {payment.receiptNumber ? ` · ${payment.receiptNumber}` : ''}
+                  </div>
                 </div>
+                {/* Only the provider holds the printer, and only a payment that
+                    was issued a receipt number has one to reprint. */}
+                {isProvider && payment.id && payment.receiptNumber && (
+                  <button
+                    type="button"
+                    className="section__link"
+                    onClick={() => reprint(payment.id!)}
+                  >
+                    {payment.receiptPrintedAt ? 'Reprint' : 'Print'}
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -167,6 +210,7 @@ function RecordPaymentModal({
   open: boolean; invoiceId: string; balanceCents: number; currency: string;
   onClose: () => void; onDone: () => void;
 }) {
+  const { notify } = useToast();
   const [amount, setAmount] = useState((balanceCents / 100).toFixed(2));
   const [method, setMethod] = useState('transfer');
   const [busy, setBusy] = useState(false);
@@ -181,11 +225,35 @@ function RecordPaymentModal({
     setBusy(true);
     setError(null);
     try {
-      await api.post(
+      const result = await api.post<PaymentResult>(
         `/invoices/${invoiceId}/payments`,
         { amountCents: cents, method },
         newIdempotencyKey(),
       );
+
+      /**
+       * The payment is committed at this point. Printing is a side effect of a
+       * completed sale, never a step of it — so it runs after, in its own
+       * try/catch, and a printer that is off, out of paper or simply not there
+       * cannot turn a recorded payment into an error the operator has to
+       * interpret at the till.
+       */
+      try {
+        const receipt = await api.get<ReceiptData>(
+          `/invoices/${invoiceId}/receipts/${result.payment.id}`,
+        );
+        await printReceipt(receipt);
+        // Best effort: whether the slip reached paper does not change the money.
+        api.post(`/invoices/${invoiceId}/receipts/${result.payment.id}/printed`, {})
+          .catch(() => {});
+      } catch {
+        notify(
+          `Payment saved as ${result.payment.receiptNumber}, but the receipt did not print. ` +
+          'You can reprint it from the payment list.',
+          'error',
+        );
+      }
+
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'We could not record that payment.');

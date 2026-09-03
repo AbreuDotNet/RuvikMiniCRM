@@ -1,0 +1,162 @@
+/* ==========================================================================
+   Payment receipt — thermal printer stylesheet
+   ==========================================================================
+
+   Targets a roll printer installed as a normal OS printer, which is how POS
+   hardware is set up on Windows and Android. The browser rasterises the page
+   and the driver feeds it; we are not speaking ESC/POS here.
+
+   What that constrains:
+
+   - Width is fixed in millimetres, not pixels. 80mm paper has a ~72mm print
+     area and 58mm has ~48mm; the rest is the mechanism's dead margin.
+   - Height is `auto`. A roll has no page length, and stating one makes the
+     driver either cut early or feed a blank tail.
+   - Monospace throughout. Thermal heads render a fixed cell grid, and columns
+     of figures only line up if the glyphs do.
+   - Pure black on white, no greys, no background fills. There is one dot and
+     it is either burned or it is not — a 50% grey prints as a muddy dither.
+   ========================================================================== */
+
+:root {
+  /* Swapped to 48mm by the width switch below. */
+  --receipt-width: 72mm;
+  --receipt-font: 11px;
+}
+
+.receipt {
+  width: var(--receipt-width);
+  margin: 0 auto;
+  padding: 2mm 0;
+  font-family: 'Courier New', 'DejaVu Sans Mono', ui-monospace, monospace;
+  font-size: var(--receipt-font);
+  line-height: 1.35;
+  color: #000;
+  background: #fff;
+  /* Long service descriptions must wrap rather than run off the paper. */
+  overflow-wrap: break-word;
+}
+
+.receipt--58 { --receipt-width: 48mm; --receipt-font: 10px; }
+
+.receipt__center { text-align: center; }
+.receipt__business {
+  font-weight: 700;
+  font-size: 1.25em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.receipt__muted { color: #000; }
+
+/* A dashed rule survives a worn print head better than a hairline. */
+.receipt__rule {
+  border: 0;
+  border-top: 1px dashed #000;
+  margin: 1.5mm 0;
+}
+.receipt__rule--solid { border-top-style: solid; }
+
+.receipt__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+}
+.receipt__row > span:last-child {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.receipt__item { margin-bottom: 1mm; }
+.receipt__item-desc { }
+.receipt__item-note { padding-left: 2mm; }
+
+.receipt__total {
+  font-weight: 700;
+  font-size: 1.2em;
+}
+
+.receipt__thanks {
+  margin-top: 2mm;
+  text-align: center;
+}
+
+/* Trailing blank lines: most cutters sit a few millimetres above the head, so
+   without this the last line of text is inside the cut. */
+.receipt__feed { height: 8mm; }
+
+/* --------------------------------------------------------------- screen --- */
+
+/* On screen it is a preview: paper-like, centred, with a shadow so the edges
+   of the roll are obvious. None of this reaches the printer. */
+.receipt-preview {
+  background: #fff;
+  color: #000;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  border-radius: 2px;
+  padding: 3mm 4mm;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* ---------------------------------------------------------------- print --- */
+
+@media print {
+  /* Height auto: a roll has no page length.
+     @page cannot read a custom property, so the width is literal here and the
+     58mm variant is set by the rule below. */
+  @page {
+    size: 72mm auto;
+    margin: 0;
+  }
+
+  /* Named page for the narrow roll: a custom property cannot cross into
+     @page, so the 58mm size is declared separately and selected by the
+     element that carries the modifier class. */
+  @page narrow-roll {
+    size: 48mm auto;
+    margin: 0;
+  }
+  .receipt--58 { page: narrow-roll; }
+
+  /* Everything except the receipt is hidden rather than unmounted, so the
+     print dialog cannot race a React re-render.
+     Scoped with :has() so it only applies while a receipt is actually mounted
+     — otherwise Ctrl+P on any ordinary screen would print a blank page. */
+  body:has(> .receipt-print-root) > *:not(.receipt-print-root) {
+    display: none !important;
+  }
+  body:has(> .receipt-print-root) > .receipt-print-root {
+    display: block !important;
+    position: static !important;
+    left: auto !important;
+  }
+
+  body:has(> .receipt-print-root),
+  html:has(body > .receipt-print-root) {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    width: var(--receipt-width);
+  }
+
+  .receipt-print-root {
+    position: static;
+    width: var(--receipt-width);
+  }
+
+  .receipt-preview {
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  /* Never split a receipt across two pieces of paper. */
+  .receipt { page-break-inside: avoid; break-inside: avoid; }
+
+  /* Force the driver to honour black text even in "draft" colour modes. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
