@@ -18,7 +18,27 @@
  * scope to begin with — for example labor on residential real property in
  * Texas. Auditors ask which one applied, so the reason is stored per line.
  */
-export type TaxTreatment = 'taxable' | 'exempt' | 'not_subject';
+export type TaxTreatment = 'taxable' | 'exempt' | 'not_subject' | 'manual_adjustment';
+
+/**
+ * What a line is, for the states that tax the parts differently.
+ *
+ * Texas leaves labour on residential real property outside the tax while
+ * taxing the materials; New York taxes both on a repair and neither on a
+ * capital improvement. Neither rule can be applied — or defended later —
+ * from a free-text description, so the classification is its own field.
+ */
+export type LineKind =
+  | 'materials'
+  | 'labour'
+  | 'equipment'
+  | 'fee'            // permits, trip charge, disposal
+  | 'reimbursement'  // a cost passed through at cost
+  | 'deposit'        // an amount requested up front on a quote
+  | 'other';
+
+/** Treatments under which tax is actually charged on the line. */
+const CHARGES_TAX: readonly TaxTreatment[] = ['taxable', 'manual_adjustment'];
 
 export interface LineInput {
   description: string;
@@ -29,10 +49,15 @@ export interface LineInput {
   taxTreatment?: TaxTreatment;
   /** Required by the API layer whenever the treatment is not 'taxable'. */
   taxReason?: string | null;
+  /** Defaults to 'other': unclassified is honest, guessed is not. */
+  lineKind?: LineKind;
+  /** Reference to the certificate relieving this line, where a state needs one. */
+  taxExemptionCertificate?: string | null;
 }
 
 export interface LineTotals extends LineInput {
   taxTreatment: TaxTreatment;
+  lineKind: LineKind;
   lineSubtotalCents: number;
   /** Share of the document discount allocated to this line. */
   lineDiscountCents: number;
@@ -122,12 +147,15 @@ export function computeTotals(inputs: LineInput[], discountCents = 0): DocumentT
     const lineSubtotalCents = subtotals[i];
     const lineDiscountCents = shares[i];
     const lineTaxableBaseCents = lineSubtotalCents - lineDiscountCents;
-    const appliedTaxRateBp = treatment === 'taxable' ? line.taxRateBp : 0;
+    // A manual adjustment still charges tax — it records that a human chose
+    // the rate rather than deriving it, which is a different thing to relieve.
+    const appliedTaxRateBp = CHARGES_TAX.includes(treatment) ? line.taxRateBp : 0;
     const lineTaxCents = roundHalfUp((lineTaxableBaseCents * appliedTaxRateBp) / 10_000);
 
     return {
       ...line,
       taxTreatment: treatment,
+      lineKind: line.lineKind ?? 'other',
       lineSubtotalCents,
       lineDiscountCents,
       lineTaxableBaseCents,
@@ -139,7 +167,7 @@ export function computeTotals(inputs: LineInput[], discountCents = 0): DocumentT
 
   const taxCents = lines.reduce((s, l) => s + l.lineTaxCents, 0);
   const taxableBaseCents = lines
-    .filter((l) => l.taxTreatment === 'taxable')
+    .filter((l) => CHARGES_TAX.includes(l.taxTreatment))
     .reduce((s, l) => s + l.lineTaxableBaseCents, 0);
 
   return {

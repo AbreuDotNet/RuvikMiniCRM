@@ -27,6 +27,67 @@ interface Dashboard {
   } | null;
 }
 
+/**
+ * Says out loud when the provider is not visible in the marketplace.
+ *
+ * Public visibility is derived from holding a live plan, so a provider without
+ * one simply does not appear in search. Letting that happen silently is the
+ * worst possible way for them to find out — they would conclude the
+ * marketplace has no customers rather than that they have no plan.
+ */
+function SubscriptionNotice({
+  status, onOpen,
+}: { status: string | null; onOpen: () => void }) {
+  const notice = (() => {
+    switch (status) {
+      case 'active':
+      case 'trialing':
+        return null;
+      case 'past_due':
+        return {
+          tone: 'danger' as const,
+          // Deliberately not a countdown: the exact grace window lives on the
+          // server, and a number repeated here would drift out of step with it.
+          body: 'Your subscription payment failed. Your listings stay in search for a '
+            + 'few more days — update your billing details to keep them there.',
+          action: 'Fix billing',
+        };
+      case 'pending_payment':
+        return {
+          tone: 'warning' as const,
+          body: 'Your plan is not paid for yet, so your listings do not appear in search.',
+          action: 'Finish checkout',
+        };
+      case 'cancelled':
+      case 'expired':
+        return {
+          tone: 'warning' as const,
+          body: 'Your plan has ended, so your listings no longer appear in search.',
+          action: 'Choose a plan',
+        };
+      default:
+        return {
+          tone: 'warning' as const,
+          body: 'You have not chosen a plan yet, so your listings do not appear in search.',
+          action: 'Choose a plan',
+        };
+    }
+  })();
+
+  if (!notice) return null;
+
+  return (
+    <div className="mb-4">
+      <Banner tone={notice.tone}>
+        {notice.body}{' '}
+        <button type="button" className="section__link" onClick={onOpen}>
+          {notice.action}
+        </button>
+      </Banner>
+    </div>
+  );
+}
+
 export function ProviderDashboardScreen() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -58,13 +119,11 @@ export function ProviderDashboardScreen() {
             </div>
           )}
 
-          {dashboard.data.subscription?.status === 'past_due' && (
-            <div className="mb-4">
-              <Banner tone="danger">
-                Your subscription payment failed. Update your billing details to stay listed.
-              </Banner>
-            </div>
-          )}
+          <SubscriptionNotice
+            status={dashboard.data.subscription?.status ?? null}
+            onOpen={() => navigate('/subscription')}
+          />
+
 
           <div className="stat-grid mb-5">
             <button

@@ -129,7 +129,15 @@ export async function elevateToMfa(user: TestUser): Promise<string> {
   return signAccessToken({ userId: user.id, role: 'admin', aal: 'mfa' });
 }
 
-/** Publishes a provider so it appears in public search. */
+/**
+ * Publishes a provider so it appears in public search.
+ *
+ * Public visibility is derived from three things, not one: the provider has
+ * published themselves, their account is active, and they hold a live
+ * subscription. So this also puts them on the cheapest plan — without it a
+ * "published" provider is still invisible, which is the whole point of
+ * tying visibility to the subscription.
+ */
 export async function publishProvider(providerId: string, verified = true): Promise<void> {
   const { getDb } = await import('../../src/db/index.js');
   const db = await getDb();
@@ -139,6 +147,47 @@ export async function publishProvider(providerId: string, verified = true): Prom
             verified_at = CASE WHEN $2 = 'verified' THEN now() ELSE NULL END
       WHERE id = $1`,
     [providerId, verified ? 'verified' : 'pending'],
+  );
+  await subscribeProvider(providerId);
+}
+
+/**
+ * Gives a provider a live subscription on the cheapest active plan.
+ * Idempotent: a provider that already has one is left alone, since the
+ * partial unique index allows only one live subscription each.
+ */
+export async function subscribeProvider(
+  providerId: string,
+  status: 'active' | 'trialing' | 'past_due' | 'cancelled' | 'expired' | 'pending_payment' = 'active',
+  planCode?: string,
+): Promise<void> {
+  const { getDb } = await import('../../src/db/index.js');
+  const db = await getDb();
+  // Named plan, or the cheapest active one when the test does not care.
+  const { rows: plan } = await db.query<{ id: string }>(
+    planCode
+      ? 'SELECT id FROM subscription_plans WHERE code = $1'
+      : `SELECT id FROM subscription_plans WHERE is_active = true
+          ORDER BY price_cents, sort_order LIMIT 1`,
+    planCode ? [planCode] : [],
+  );
+  if (!plan[0]) throw new Error(`no subscription plan available${planCode ? ` for ${planCode}` : ''}`);
+
+  const { rows } = await db.query<{ id: string }>(
+    `SELECT id FROM subscriptions WHERE provider_id = $1
+      AND status IN ('pending_payment','trialing','active','past_due')`,
+    [providerId],
+  );
+  if (rows[0]) {
+    await db.query('UPDATE subscriptions SET status = $2, plan_id = $3 WHERE id = $1', [
+      rows[0].id, status, plan[0].id,
+    ]);
+    return;
+  }
+  await db.query(
+    `INSERT INTO subscriptions (provider_id, plan_id, status, current_period_start, current_period_end)
+     VALUES ($1,$2,$3, now(), now() + interval '1 month')`,
+    [providerId, plan[0].id, status],
   );
 }
 

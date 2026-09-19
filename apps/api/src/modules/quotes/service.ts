@@ -1,5 +1,7 @@
 import { getDb } from '../../db/index.js';
-import { computeTotals, type LineInput, type TaxTreatment } from '../../lib/money.js';
+import {
+  computeTotals, type LineInput, type TaxTreatment, type LineKind,
+} from '../../lib/money.js';
 import { nextNumber } from '../../lib/numbering.js';
 import { conflict, notFound, forbidden } from '../../lib/errors.js';
 import { enqueue } from '../../lib/queue.js';
@@ -15,6 +17,8 @@ export interface QuoteLineInput {
   taxRateBp: number;
   taxTreatment?: TaxTreatment;
   taxReason?: string | null;
+  lineKind?: LineKind;
+  taxExemptionCertificate?: string | null;
 }
 
 export interface CreateQuoteInput {
@@ -35,6 +39,8 @@ const toLineInputs = (lines: QuoteLineInput[]): LineInput[] =>
     taxRateBp: l.taxRateBp,
     taxTreatment: l.taxTreatment ?? 'taxable',
     taxReason: l.taxReason ?? null,
+    lineKind: l.lineKind ?? 'other',
+    taxExemptionCertificate: l.taxExemptionCertificate ?? null,
   }));
 
 /**
@@ -85,12 +91,14 @@ export async function createQuote(
         `INSERT INTO quote_items (quote_id, description, quantity, unit_price_cents,
                                   tax_rate_bp, line_total_cents, sort_order,
                                   tax_treatment, tax_reason, line_discount_cents,
-                                  line_taxable_base_cents, line_tax_cents)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                                  line_taxable_base_cents, line_tax_cents,
+                                  line_kind, tax_exemption_certificate)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [quoteId, line.description, line.quantity, line.unitPriceCents,
          line.taxRateBp, line.lineTotalCents, index,
          line.taxTreatment, line.taxReason ?? null, line.lineDiscountCents,
-         line.lineTaxableBaseCents, line.lineTaxCents],
+         line.lineTaxableBaseCents, line.lineTaxCents,
+         line.lineKind, line.taxExemptionCertificate ?? null],
       );
     }
 
@@ -131,12 +139,14 @@ export async function updateQuote(
           `INSERT INTO quote_items (quote_id, description, quantity, unit_price_cents,
                                     tax_rate_bp, line_total_cents, sort_order,
                                     tax_treatment, tax_reason, line_discount_cents,
-                                    line_taxable_base_cents, line_tax_cents)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                                    line_taxable_base_cents, line_tax_cents,
+                                    line_kind, tax_exemption_certificate)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
           [quoteId, line.description, line.quantity, line.unitPriceCents,
            line.taxRateBp, line.lineTotalCents, index,
            line.taxTreatment, line.taxReason ?? null, line.lineDiscountCents,
-           line.lineTaxableBaseCents, line.lineTaxCents],
+           line.lineTaxableBaseCents, line.lineTaxCents,
+           line.lineKind, line.taxExemptionCertificate ?? null],
         );
       }
       await c.query(

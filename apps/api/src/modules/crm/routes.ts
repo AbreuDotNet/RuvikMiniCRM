@@ -4,7 +4,9 @@ import { getDb } from '../../db/index.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import { authenticate, requireProvider, tenantId } from '../../middleware/auth.js';
 import { limiters } from '../../middleware/rateLimit.js';
-import { validate, validated, uuidSchema, safeText, phoneSchema, emailSchema } from '../../middleware/validate.js';
+import {
+  validate, validated, uuidSchema, safeText, phoneSchema, emailSchema, usStateSchema,
+} from '../../middleware/validate.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { writeAudit } from '../../lib/audit.js';
 import { paginationSchema, decodeCursor, buildPage } from '../../lib/pagination.js';
@@ -19,6 +21,15 @@ const ctxOf = (req: any) => ({ ip: req.ip, userAgent: req.headers['user-agent'] 
 
 /* -------------------------------- clients -------------------------------- */
 
+/**
+ * State and postal code are not decoration on an address here.
+ *
+ * US sales tax is sourced to where the work is, and a city name alone does not
+ * identify a jurisdiction — there is a Portland in Oregon, which levies no
+ * general sales tax, and a Portland in Maine, which does. The columns have
+ * existed since the sales-tax migration; this schema silently dropped them, so
+ * a provider could type an address and lose the one field the tax depends on.
+ */
 const clientSchema = z.object({
   fullName: safeText(120, 2),
   email: emailSchema.optional().nullable(),
@@ -26,6 +37,8 @@ const clientSchema = z.object({
   whatsappPhone: phoneSchema.optional().nullable(),
   addressLine: safeText(200).optional().nullable(),
   city: safeText(80).optional().nullable(),
+  region: usStateSchema.optional().nullable(),
+  postalCode: safeText(20).optional().nullable(),
   tags: z.array(safeText(30)).max(10).optional(),
 });
 
@@ -92,10 +105,11 @@ crmRouter.post(
     const db = await getDb();
     const { rows } = await db.query<{ id: string }>(
       `INSERT INTO clients (provider_id, full_name, email, phone_e164, whatsapp_phone_e164,
-                            address_line, city, tags)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+                            address_line, city, region, postal_code, tags)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
       [tenantId(req), b.fullName, b.email ?? null, b.phone ?? null, b.whatsappPhone ?? null,
-       b.addressLine ?? null, b.city ?? null, JSON.stringify(b.tags ?? [])],
+       b.addressLine ?? null, b.city ?? null, b.region ?? null, b.postalCode ?? null,
+       JSON.stringify(b.tags ?? [])],
     );
     await writeAudit({
       actorUserId: req.auth!.userId, actorRole: 'provider', action: 'client.created',
@@ -112,6 +126,7 @@ crmRouter.get(
     const db = await getDb();
     const { rows } = await db.query<any>(
       `SELECT id, full_name, email, phone_e164, whatsapp_phone_e164, address_line, city,
+              region, postal_code,
               tags, user_id, created_at
          FROM clients WHERE id = $1 AND provider_id = $2`,
       [req.params.id, tenantId(req)],
@@ -134,6 +149,8 @@ crmRouter.get(
       whatsappPhone: c.whatsapp_phone_e164,
       addressLine: c.address_line,
       city: c.city,
+      region: c.region,
+      postalCode: c.postal_code,
       tags: c.tags,
       isPlatformCustomer: Boolean(c.user_id),
       createdAt: c.created_at,
@@ -158,7 +175,8 @@ crmRouter.patch(
   asyncHandler(async (req, res) => {
     const map: Record<string, string> = {
       fullName: 'full_name', email: 'email', phone: 'phone_e164',
-      whatsappPhone: 'whatsapp_phone_e164', addressLine: 'address_line', city: 'city', tags: 'tags',
+      whatsappPhone: 'whatsapp_phone_e164', addressLine: 'address_line', city: 'city',
+      region: 'region', postalCode: 'postal_code', tags: 'tags',
     };
     const body = req.body as Record<string, unknown>;
     const sets: string[] = [];
@@ -191,6 +209,11 @@ const jobSchema = z.object({
   description: safeText(4000).optional().nullable(),
   addressLine: safeText(200).optional().nullable(),
   city: safeText(80).optional().nullable(),
+  // Where the work is, which is what the invoice snapshots as the tax
+  // jurisdiction. Dropping these here left every manually created job unable
+  // to record a state.
+  region: usStateSchema.optional().nullable(),
+  postalCode: safeText(20).optional().nullable(),
   scheduledStart: z.string().datetime().optional().nullable(),
   scheduledEnd: z.string().datetime().optional().nullable(),
 }).refine((v) => v.clientId || v.newClient, {
@@ -258,20 +281,42 @@ crmRouter.post(
 
     const result = await db.tx(async (c) => {
       let clientId = b.clientId;
+      let customerUserId: string | null = null;
       if (!clientId && b.newClient) {
         const { rows } = await c.query<{ id: string }>(
-          `INSERT INTO clients (provider_id, full_name, email, phone_e164, whatsapp_phone_e164, city)
-           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+          `INSERT INTO clients (provider_id, full_name, email, phone_e164, whatsapp_phone_e164,
+                                address_line, city, region, postal_code)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
           [providerId, b.newClient.fullName, b.newClient.email ?? null, b.newClient.phone ?? null,
-           b.newClient.whatsappPhone ?? null, b.newClient.city ?? null],
+           b.newClient.whatsappPhone ?? null, b.newClient.addressLine ?? null,
+           b.newClient.city ?? null, b.newClient.region ?? null, b.newClient.postalCode ?? null],
         );
         clientId = rows[0].id;
       } else {
         // An id from the request body must be proven to belong to this tenant.
-        const owned = await c.query('SELECT 1 FROM clients WHERE id = $1 AND provider_id = $2', [
-          clientId, providerId,
-        ]);
+        const owned = await c.query<{ user_id: string | null }>(
+          'SELECT user_id FROM clients WHERE id = $1 AND provider_id = $2',
+          [clientId, providerId],
+        );
         if (!owned.rows.length) throw notFound('That client was not found.');
+
+        /**
+         * Carry the platform account onto the job when the client has one.
+         *
+         * Without this, a job the provider raised by hand had a null
+         * `customer_user_id`, and `respondToQuote` checks exactly that field —
+         * so the customer could never accept a quote for it in the app. The
+         * quote looked sendable and was undeliverable, and the provider had to
+         * chase acceptance out of band.
+         *
+         * Safe to link because `clients.user_id` is only ever written by the
+         * customer's own request to this provider: the provider cannot set it
+         * when creating or editing a client. A non-null value therefore means
+         * this customer already engaged this provider through the platform,
+         * and the job continues that relationship rather than attaching a
+         * stranger's account to work they never asked for.
+         */
+        customerUserId = owned.rows[0].user_id;
       }
 
       if (b.serviceId) {
@@ -283,13 +328,16 @@ crmRouter.post(
 
       const reference = await nextNumber(c, providerId, 'job');
       const { rows } = await c.query<{ id: string }>(
-        `INSERT INTO jobs (provider_id, client_id, service_id, reference, title, description,
-                           address_line, city, scheduled_start, scheduled_end, source, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'manual',
-                 CASE WHEN $9::timestamptz IS NULL THEN 'new_lead' ELSE 'scheduled' END)
+        `INSERT INTO jobs (provider_id, client_id, customer_user_id, service_id, reference,
+                           title, description, address_line, city, region, postal_code,
+                           scheduled_start, scheduled_end, source, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'manual',
+                 CASE WHEN $12::timestamptz IS NULL THEN 'new_lead' ELSE 'scheduled' END)
          RETURNING id`,
-        [providerId, clientId, b.serviceId ?? null, reference, b.title, b.description ?? null,
-         b.addressLine ?? null, b.city ?? null, b.scheduledStart ?? null, b.scheduledEnd ?? null],
+        [providerId, clientId, customerUserId, b.serviceId ?? null, reference,
+         b.title, b.description ?? null,
+         b.addressLine ?? null, b.city ?? null, b.region ?? null, b.postalCode ?? null,
+         b.scheduledStart ?? null, b.scheduledEnd ?? null],
       );
       await c.query(
         `INSERT INTO job_status_events (job_id, from_status, to_status, actor_user_id, note)
@@ -360,6 +408,8 @@ crmRouter.get(
       source: j.source,
       addressLine: j.address_line,
       city: j.city,
+      region: j.region,
+      postalCode: j.postal_code,
       scheduledStart: j.scheduled_start,
       scheduledEnd: j.scheduled_end,
       completedAt: j.completed_at,

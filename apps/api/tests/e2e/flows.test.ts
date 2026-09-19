@@ -4,7 +4,7 @@ import type { Express } from 'express';
 import crypto from 'node:crypto';
 import {
   getTestApp, resetDatabase, seedCatalogue, registerUser, createAdmin, elevateToMfa,
-  publishProvider, drainQueue, auth, STRONG_PASSWORD, type TestUser,
+  publishProvider, subscribeProvider, drainQueue, auth, STRONG_PASSWORD, type TestUser,
 } from '../helpers/setup.js';
 
 let app: Express;
@@ -114,6 +114,10 @@ describe('Flow 1 — customer registration and service search', () => {
 
   it('paginates with a stable cursor', async () => {
     const { provider } = await setupProvider();
+    // Five listings in total, so this needs a plan that allows them. Starter
+    // caps at three, and that cap is now applied to every provider — it used
+    // to be skipped for anyone without a live subscription.
+    await subscribeProvider(provider.providerId!, 'active', 'pro');
     for (let i = 0; i < 4; i += 1) {
       await request(app)
         .post('/api/v1/provider/services')
@@ -573,7 +577,10 @@ describe('Flow 6 — job completion, invoicing and review', () => {
     const view = await request(app)
       .get(`/api/v1/invoices/${invoice.body.id}`)
       .set(auth(customer.token)).expect(200);
-    expect(view.body.status).toBe('sent');
+    // The customer opening it moves 'sent' to 'viewed', so the provider can
+    // tell "they have not looked" from "they are not paying".
+    expect(view.body.status).toBe('viewed');
+    expect(view.body.firstViewedAt).toBeTruthy();
     expect(view.body.pdfUrl).toContain('/api/v1/files/download');
 
     const payment = await request(app)

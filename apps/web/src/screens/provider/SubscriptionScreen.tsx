@@ -50,14 +50,18 @@ export function SubscriptionScreen() {
   const subscribe = async (planCode: string) => {
     setBusy(planCode);
     try {
-      const checkout = await api.post<{
+      const result = await api.post<{
         subscriptionId: string;
-        checkout: { reference: string; amountCents: number; currency: string };
+        status: string;
+        /** Null on a free plan: there is nothing to pay, so it is already live. */
+        checkout: { reference: string; amountCents: number; currency: string } | null;
       }>('/billing/subscription', { planCode }, newIdempotencyKey());
 
       notify(
-        `Checkout started for ${formatMoney(checkout.checkout.amountCents, checkout.checkout.currency)}. ` +
-        'Your plan activates once payment is confirmed.',
+        result.checkout
+          ? `Checkout started for ${formatMoney(result.checkout.amountCents, result.checkout.currency)}. `
+            + 'Your plan activates once payment is confirmed.'
+          : 'Your plan is active and your listings are live.',
         'success',
       );
       current.reload();
@@ -185,15 +189,25 @@ export function SubscriptionScreen() {
 
                   {!isCurrent && (
                     <div className="mt-4">
-                      <Button
-                        block
-                        variant={plan.code === 'pro' ? 'primary' : 'secondary'}
-                        loading={busy === plan.code}
-                        disabled={busy !== null}
-                        onClick={() => subscribe(plan.code)}
-                      >
-                        {sub ? 'Switch to this plan' : 'Choose plan'}
-                      </Button>
+                      {/* Changing plan mid-subscription is not built yet, and
+                          the server refuses it. Offering a button that always
+                          errors is worse than saying so. */}
+                      {sub?.status === 'active' ? (
+                        <p className="tiny subtle" style={{ margin: 0 }}>
+                          Cancel your current plan to move to this one. Switching without a
+                          gap is not available yet.
+                        </p>
+                      ) : (
+                        <Button
+                          block
+                          variant={plan.code === 'pro' ? 'primary' : 'secondary'}
+                          loading={busy === plan.code}
+                          disabled={busy !== null}
+                          onClick={() => subscribe(plan.code)}
+                        >
+                          Choose plan
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -227,7 +241,7 @@ export function SubscriptionScreen() {
       <ConfirmDialog
         open={cancelOpen}
         title="Cancel your subscription?"
-        body="Your plan stays active until the end of the current billing period. After that your listings are hidden from search."
+        body="Your plan stays active until the end of the current billing period. After that your listings stop appearing in search, and your clients, jobs and invoices stay exactly where they are. Choosing a plan again puts your listings straight back."
         confirmLabel="Cancel plan"
         danger
         loading={busy === 'cancel'}

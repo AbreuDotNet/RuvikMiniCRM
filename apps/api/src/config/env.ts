@@ -83,6 +83,15 @@ const schema = z.object({
 
   BILLING_WEBHOOK_SECRET: z.string().optional(),
 
+  /**
+   * Stripe. All optional: the integration in modules/billing/stripe sits in
+   * the repository unconfigured, reports that it is not set up, and the manual
+   * billing flow keeps working. Nothing here is required to boot.
+   */
+  STRIPE_SECRET_KEY: z.string().startsWith('sk_').optional(),
+  /** The signing secret of the webhook endpoint, not the API key. */
+  STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_').optional(),
+
   // Liveness for the standalone worker process (`npm run worker`).
   WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(4001),
   /**

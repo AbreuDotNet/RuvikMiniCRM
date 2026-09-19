@@ -7,6 +7,8 @@ import { notify } from '../modules/notifications/service.js';
 import { getStorage } from '../lib/storage.js';
 import { env } from '../config/env.js';
 import type { QueueName } from '../lib/queue.js';
+import { GRACE_DAYS, scheduleGraceExpiry } from '../modules/billing/service.js';
+import { OVERDUE_CANDIDATE_STATUSES, sqlIn } from '../lib/invoiceStatus.js';
 
 export type JobHandler = (payload: Record<string, any>) => Promise<void>;
 
@@ -43,7 +45,7 @@ async function generatePdf(payload: Record<string, any>): Promise<void> {
 
   const items = await db.query<any>(
     `SELECT description, quantity, unit_price_cents, tax_rate_bp, line_total_cents,
-            tax_treatment, tax_reason
+            tax_treatment, tax_reason, line_kind, line_tax_cents, tax_exemption_certificate
        FROM ${itemsTable} WHERE ${fkColumn} = $1 ORDER BY sort_order`,
     [id],
   );
@@ -56,6 +58,11 @@ async function generatePdf(payload: Record<string, any>): Promise<void> {
     lineTotalCents: i.line_total_cents,
     taxTreatment: i.tax_treatment,
     taxReason: i.tax_reason,
+    // The tax actually charged on the line, so the document shows a figure
+    // rather than a rate the reader has to apply themselves.
+    lineTaxCents: i.line_tax_cents,
+    lineKind: i.line_kind,
+    taxExemptionCertificate: i.tax_exemption_certificate,
   }));
 
   const asDate = (v: unknown) =>
@@ -92,6 +99,17 @@ async function generatePdf(payload: Record<string, any>): Promise<void> {
     taxableBaseCents: doc.taxable_base_cents,
     untaxedBaseCents: doc.untaxed_base_cents,
     taxJurisdiction: doc.tax_jurisdiction,
+    // Where and when the work happened. Only invoices carry it: a quote is
+    // priced before the work exists.
+    serviceAddress: kind === 'invoice' && doc.service_address_line
+      ? {
+          name: [doc.service_region, doc.service_postal_code].filter(Boolean).join(' '),
+          addressLine: doc.service_address_line,
+          city: doc.service_city,
+        }
+      : null,
+    serviceDate: kind === 'invoice' ? asDate(doc.service_date) : null,
+    contractType: doc.contract_type,
     amountPaidCents: kind === 'invoice' ? doc.amount_paid_cents : undefined,
     notes: doc.notes,
     terms: kind === 'quote' ? doc.terms : null,
@@ -188,12 +206,57 @@ async function renewSubscription(payload: Record<string, any>): Promise<void> {
     `UPDATE subscriptions SET status = 'past_due', updated_at = now() WHERE id = $1`,
     [sub.id],
   );
+  // past_due used to be a terminal state in practice: nothing ever moved a
+  // subscription out of it, so a provider who stopped paying kept their
+  // listing for ever. This is the clock that ends it.
+  await scheduleGraceExpiry(db, sub.id);
+
   await notify(sub.user_id, {
     type: 'subscription.renewal_due',
     title: 'Subscription renewal due',
-    body: `Your ${sub.name} plan needs a renewal payment to stay active.`,
+    body: `Your ${sub.name} plan needs a renewal payment. You stay listed in search `
+      + `for ${GRACE_DAYS} more days.`,
     data: { subscriptionId: sub.id },
   });
+}
+
+/**
+ * Ends the grace window opened by a failed or missed renewal.
+ *
+ * Idempotent on purpose: the job is booked when the charge fails and runs a
+ * week later, by which time the provider may well have paid. Anything that is
+ * no longer `past_due` is left exactly as it is.
+ */
+async function expireGrace(payload: Record<string, any>): Promise<void> {
+  const db = await getDb();
+  const { rows } = await db.query<any>(
+    `SELECT s.id, s.status, p.user_id, sp.name
+       FROM subscriptions s
+       JOIN providers p ON p.id = s.provider_id
+       JOIN subscription_plans sp ON sp.id = s.plan_id
+      WHERE s.id = $1`,
+    [String(payload.subscriptionId)],
+  );
+  const sub = rows[0];
+  if (!sub || sub.status !== 'past_due') return;
+
+  await db.query(
+    `UPDATE subscriptions SET status = 'expired', updated_at = now() WHERE id = $1`,
+    [sub.id],
+  );
+
+  // Visibility is derived from this status in discovery, so nothing needs to
+  // touch the provider's own is_published flag — which stays theirs, and
+  // means paying again restores the listing with no state to put back.
+  await notify(sub.user_id, {
+    type: 'subscription.expired',
+    title: 'Your listings are no longer visible',
+    body: `Your ${sub.name} plan expired after ${GRACE_DAYS} days without payment. `
+      + 'Choose a plan to appear in search again.',
+    data: { subscriptionId: sub.id },
+  });
+
+  logger.info({ subscriptionId: sub.id }, 'subscription grace expired');
 }
 
 /* --------------------------- overdue invoices ----------------------------- */
@@ -202,7 +265,7 @@ async function flagOverdueInvoices(): Promise<void> {
   const db = await getDb();
   const { rows } = await db.query<any>(
     `UPDATE invoices SET status = 'overdue', updated_at = now()
-      WHERE status IN ('sent','partially_paid')
+      WHERE status IN ${sqlIn(OVERDUE_CANDIDATE_STATUSES)}
         AND due_date IS NOT NULL AND due_date < CURRENT_DATE
       RETURNING id, number, provider_id, job_id, total_cents, amount_paid_cents`,
   );
@@ -263,6 +326,7 @@ export const HANDLERS: Record<QueueName, JobHandler> = {
   'email.send': sendEmail,
   'notification.push': async () => undefined,
   'billing.renew': renewSubscription,
+  'billing.grace_expired': expireGrace,
   'invoice.overdue': flagOverdueInvoices,
   'file.scan': scanFile,
 };

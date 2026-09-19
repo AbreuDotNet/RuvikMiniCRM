@@ -43,11 +43,35 @@ export interface ServiceSearchRow {
 }
 
 /**
+ * Public visibility, derived rather than stored.
+ *
+ * A listing is only worth showing while the provider is paying for it, and the
+ * subscription was previously decorative: a cancelled or lapsed provider kept
+ * full search visibility, which is also what the cancellation dialog in the
+ * app promised would stop.
+ *
+ * `past_due` is deliberately included — that is the grace window after a
+ * failed charge, and `billing.grace_expired` moves it to `expired` a week
+ * later. `pending_payment` is not: they started a checkout and never finished
+ * it. A provider with no subscription row at all is not visible either, so
+ * choosing a plan (the free one counts) is what puts you in the catalogue.
+ *
+ * Deriving this in the query rather than writing `is_published = false` keeps
+ * the flag the provider's own: paying again restores the listing with no
+ * saved state to put back, exactly like the admin panel's effective state.
+ */
+const LIVE_SUBSCRIPTION = `EXISTS (
+  SELECT 1 FROM subscriptions sub
+   WHERE sub.provider_id = p.id
+     AND sub.status IN ('trialing','active','past_due')
+)`;
+
+/**
  * Service search across the public catalogue.
  *
- * Only published, verified-or-unverified-but-active providers appear, and
- * only `active` listings. Ranking uses the stored tsvector when a text query
- * is present; otherwise the caller's chosen sort.
+ * Only published, subscribed, active providers appear, and only `active`
+ * listings. Ranking uses the stored tsvector when a text query is present;
+ * otherwise the caller's chosen sort.
  *
  * The query is a single statement with joins — deliberately not a per-row
  * provider lookup — so result count does not multiply round trips (no N+1).
@@ -59,6 +83,7 @@ export async function searchServices(filters: SearchFilters): Promise<Page<Servi
     "s.status = 'active'",
     'p.is_published = true',
     "u.status = 'active'",
+    LIVE_SUBSCRIPTION,
   ];
 
   const push = (value: unknown) => {
@@ -189,7 +214,8 @@ export async function getPublicProvider(slugOrId: string) {
        JOIN users u ON u.id = p.user_id
        LEFT JOIN files f ON f.id = p.logo_file_id AND f.scan_status = 'clean'
       WHERE ${isUuid ? 'p.id = $1' : 'p.slug = $1'}
-        AND p.is_published = true AND u.status = 'active'`,
+        AND p.is_published = true AND u.status = 'active'
+        AND ${LIVE_SUBSCRIPTION}`,
     [slugOrId],
   );
   const provider = rows[0];
@@ -283,7 +309,8 @@ export async function getPublicService(serviceId: string) {
        JOIN providers p ON p.id = s.provider_id
        JOIN users u ON u.id = p.user_id
        JOIN categories c ON c.id = s.category_id
-      WHERE s.id = $1 AND s.status = 'active' AND p.is_published = true AND u.status = 'active'`,
+      WHERE s.id = $1 AND s.status = 'active' AND p.is_published = true AND u.status = 'active'
+        AND ${LIVE_SUBSCRIPTION}`,
     [serviceId],
   );
   const s = rows[0];
@@ -348,6 +375,7 @@ export async function listFeaturedProviders(limit = 10) {
        FROM providers p
        JOIN users u ON u.id = p.user_id
       WHERE p.is_published = true AND u.status = 'active'
+        AND ${LIVE_SUBSCRIPTION}
         AND EXISTS (SELECT 1 FROM services s WHERE s.provider_id = p.id AND s.status = 'active')
       ORDER BY p.rating_avg DESC, p.rating_count DESC, p.completed_jobs DESC
       LIMIT $1`,

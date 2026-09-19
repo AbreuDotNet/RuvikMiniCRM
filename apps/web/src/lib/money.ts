@@ -10,7 +10,10 @@
  * editing one without the other fails the build. Keep them identical.
  */
 
-export type TaxTreatment = 'taxable' | 'exempt' | 'not_subject';
+export type TaxTreatment = 'taxable' | 'exempt' | 'not_subject' | 'manual_adjustment';
+
+/** Treatments under which tax is actually charged on the line. */
+const CHARGES_TAX: readonly TaxTreatment[] = ['taxable', 'manual_adjustment'];
 
 export interface LineInput {
   quantity: number;
@@ -75,7 +78,9 @@ export function computeTotals(inputs: LineInput[], discountCents = 0): DocumentT
     const lineSubtotalCents = subtotals[i];
     const lineDiscountCents = shares[i];
     const lineTaxableBaseCents = lineSubtotalCents - lineDiscountCents;
-    const appliedTaxRateBp = taxTreatment === 'taxable' ? line.taxRateBp : 0;
+    // A manual adjustment still charges tax — it records that a human chose
+    // the rate rather than deriving it, which is a different thing to relieve.
+    const appliedTaxRateBp = CHARGES_TAX.includes(taxTreatment) ? line.taxRateBp : 0;
     const lineTaxCents = roundHalfUp((lineTaxableBaseCents * appliedTaxRateBp) / 10_000);
 
     return {
@@ -91,7 +96,7 @@ export function computeTotals(inputs: LineInput[], discountCents = 0): DocumentT
 
   const taxCents = lines.reduce((s, l) => s + l.lineTaxCents, 0);
   const taxableBaseCents = lines
-    .filter((l) => l.taxTreatment === 'taxable')
+    .filter((l) => CHARGES_TAX.includes(l.taxTreatment))
     .reduce((s, l) => s + l.lineTaxableBaseCents, 0);
 
   return {

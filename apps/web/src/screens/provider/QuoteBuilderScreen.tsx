@@ -17,6 +17,24 @@ const TREATMENT_LABELS: Record<TaxTreatment, string> = {
   taxable: 'Taxable',
   exempt: 'Exempt (certificate on file)',
   not_subject: 'Not subject to sales tax',
+  manual_adjustment: 'Tax set by hand',
+};
+
+/**
+ * What the line is.
+ *
+ * Several states tax the parts of a job differently — Texas leaves labour on
+ * residential real property outside the tax while taxing the materials — and a
+ * free-text description cannot carry that. Picking it here is what lets the
+ * document explain its own treatment later.
+ */
+const KIND_LABELS: Record<string, string> = {
+  labour: 'Labour',
+  materials: 'Materials',
+  equipment: 'Equipment',
+  fee: 'Fee (permit, trip charge, disposal)',
+  reimbursement: 'Reimbursed cost',
+  other: 'Not classified',
 };
 
 interface DraftLine {
@@ -27,6 +45,8 @@ interface DraftLine {
   taxRate: string;
   taxTreatment: TaxTreatment;
   taxReason: string;
+  lineKind: string;
+  taxExemptionCertificate: string;
 }
 
 interface JobOption {
@@ -51,6 +71,10 @@ const newLine = (defaultRate: string): DraftLine => ({
   taxRate: defaultRate,
   taxTreatment: 'taxable',
   taxReason: '',
+  // 'other' rather than a guess: an unclassified line is honest, and a wrong
+  // classification is what makes a treatment indefensible.
+  lineKind: 'other',
+  taxExemptionCertificate: '',
 });
 
 /**
@@ -66,6 +90,7 @@ function computePreview(lines: DraftLine[], discountValue: string) {
       unitPriceCents: Math.round((Number(l.unitPrice) || 0) * 100),
       taxRateBp: Math.round((Number(l.taxRate) || 0) * 100),
       taxTreatment: l.taxTreatment,
+      lineKind: l.lineKind,
     })),
     Math.round((Number(discountValue) || 0) * 100),
   );
@@ -148,6 +173,8 @@ export function QuoteBuilderScreen() {
             unitPriceCents: Math.round(Number(l.unitPrice) * 100),
             taxRateBp: Math.round((Number(l.taxRate) || 0) * 100),
             taxTreatment: l.taxTreatment,
+            lineKind: l.lineKind,
+            taxExemptionCertificate: l.taxExemptionCertificate.trim() || undefined,
             taxReason: l.taxTreatment === 'taxable' ? undefined : l.taxReason.trim(),
           })),
         discountCents: Math.round((Number(discount) || 0) * 100),
@@ -282,6 +309,23 @@ export function QuoteBuilderScreen() {
             </div>
 
             <div className="mt-2">
+              <label className="tiny subtle" htmlFor={`kind-${line.key}`}>What is this line?</label>
+              <select
+                id={`kind-${line.key}`}
+                className="select"
+                value={line.lineKind}
+                onChange={(e) => updateLine(line.key, 'lineKind', e.target.value)}
+              >
+                {Object.keys(KIND_LABELS).map((k) => (
+                  <option key={k} value={k}>{KIND_LABELS[k]}</option>
+                ))}
+              </select>
+              <span className="tiny subtle">
+                Several states tax labour and materials differently on work to a building.
+              </span>
+            </div>
+
+            <div className="mt-2">
               <label className="tiny subtle" htmlFor={`treatment-${line.key}`}>Tax treatment</label>
               <select
                 id={`treatment-${line.key}`}
@@ -298,23 +342,47 @@ export function QuoteBuilderScreen() {
             {line.taxTreatment !== 'taxable' && (
               <div className="mt-2">
                 <label className="tiny subtle" htmlFor={`reason-${line.key}`}>
-                  Why is this line not taxed?
+                  {line.taxTreatment === 'manual_adjustment'
+                    ? 'What did you adjust, and why?'
+                    : 'Why is this line not taxed?'}
                 </label>
                 <input
                   id={`reason-${line.key}`}
                   className="input"
-                  placeholder={line.taxTreatment === 'exempt'
-                    ? 'e.g. resale certificate on file'
-                    : 'e.g. labour on residential real property'}
+                  placeholder={
+                    line.taxTreatment === 'exempt' ? 'e.g. capital improvement, certificate held'
+                      : line.taxTreatment === 'manual_adjustment' ? 'e.g. rate agreed with the client CPA'
+                        : 'e.g. labour on residential real property'
+                  }
                   value={line.taxReason}
                   onChange={(e) => updateLine(line.key, 'taxReason', e.target.value)}
                   maxLength={200}
                   aria-invalid={line.taxReason.trim() ? undefined : true}
                 />
                 <span className="tiny subtle">
-                  Kept with the line and shown on the invoice — an unexplained untaxed line is
+                  Kept with the line and printed on the invoice — an unexplained untaxed line is
                   what an audit asks about.
                 </span>
+
+                {line.taxTreatment === 'exempt' && (
+                  <div className="mt-2">
+                    <label className="tiny subtle" htmlFor={`cert-${line.key}`}>
+                      Certificate reference (optional)
+                    </label>
+                    <input
+                      id={`cert-${line.key}`}
+                      className="input"
+                      placeholder="e.g. ST-124 2026-0042"
+                      value={line.taxExemptionCertificate}
+                      onChange={(e) => updateLine(line.key, 'taxExemptionCertificate', e.target.value)}
+                      maxLength={120}
+                    />
+                    <span className="tiny subtle">
+                      Some states relieve the work only while you hold the customer’s
+                      certificate. Recording its reference here keeps it with the document.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

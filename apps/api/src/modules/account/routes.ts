@@ -9,6 +9,7 @@ import * as whatsapp from '../whatsapp/service.js';
 import { verifyPassword } from '../../lib/crypto.js';
 import { revokeAllForUser } from '../../lib/tokens.js';
 import { writeAudit } from '../../lib/audit.js';
+import { OPEN_INVOICE_STATUSES, sqlIn } from '../../lib/invoiceStatus.js';
 import { unauthorized, conflict, notFound } from '../../lib/errors.js';
 
 export const accountRouter = Router();
@@ -223,7 +224,7 @@ accountRouter.post(
       const open = await db.query<{ count: string }>(
         `SELECT count(*)::text FROM invoices i
            JOIN providers p ON p.id = i.provider_id
-          WHERE p.user_id = $1 AND i.status IN ('sent','partially_paid','overdue')`,
+          WHERE p.user_id = $1 AND i.status IN ${sqlIn(OPEN_INVOICE_STATUSES)}`,
         [req.auth!.userId],
       );
       if (Number(open.rows[0].count) > 0) {

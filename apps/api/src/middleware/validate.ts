@@ -146,7 +146,26 @@ export const safeText = (max: number, min = 1) =>
 export const moneyCents = z.number().int().min(0).max(100_000_000);
 export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD.');
 
-export const TAX_TREATMENTS = ['taxable', 'exempt', 'not_subject'] as const;
+export const TAX_TREATMENTS = ['taxable', 'exempt', 'not_subject', 'manual_adjustment'] as const;
+
+/**
+ * What a line is. Materials and labour are the axis nearly every state splits
+ * on for work on real property, and a free-text description cannot carry it.
+ */
+export const LINE_KINDS = [
+  'materials', 'labour', 'equipment', 'fee', 'reimbursement', 'deposit', 'other',
+] as const;
+
+/**
+ * How the job was priced, which in some states is itself a tax election.
+ *
+ * Texas: under a lump-sum contract the contractor pays tax on materials at
+ * purchase and charges the customer none; under a separated contract they buy
+ * materials for resale and collect tax from the customer. Itemising labour and
+ * materials on the document is what makes it separated, so the document has to
+ * state which it is rather than leave an auditor to infer it.
+ */
+export const CONTRACT_TYPES = ['lump_sum', 'separated', 'not_specified'] as const;
 
 /**
  * One line of a quote or invoice.
@@ -172,9 +191,23 @@ export const billingLineSchema = z
     taxRateBp: z.number().int().min(0).max(1500).default(0),
     taxTreatment: z.enum(TAX_TREATMENTS).default('taxable'),
     taxReason: safeText(200).optional().nullable(),
+    lineKind: z.enum(LINE_KINDS).default('other'),
+    /**
+     * Where a state requires the seller to hold a certificate to justify
+     * relief — New York's ST-124 on a capital improvement, a resale or
+     * exemption certificate elsewhere — its reference goes here.
+     */
+    taxExemptionCertificate: safeText(120).optional().nullable(),
   })
   .refine((l) => l.taxTreatment === 'taxable' || Boolean(l.taxReason?.trim()), {
     message: 'Say why this line is not taxed — for example an exemption certificate on file, or labour outside the tax’s scope.',
+    path: ['taxReason'],
+  })
+  // A manual adjustment is the one treatment that still charges tax, so the
+  // reason has to say what was overridden and why rather than why nothing was
+  // charged. Requiring it separately keeps the message honest.
+  .refine((l) => l.taxTreatment !== 'manual_adjustment' || Boolean(l.taxReason?.trim()), {
+    message: 'Say what you adjusted and why. A hand-set tax figure has to be attributable.',
     path: ['taxReason'],
   });
 

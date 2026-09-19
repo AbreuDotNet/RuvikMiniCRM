@@ -1,5 +1,7 @@
 import { getDb } from '../../db/index.js';
-import { computeTotals, type LineInput, type TaxTreatment } from '../../lib/money.js';
+import {
+  computeTotals, type LineInput, type TaxTreatment, type LineKind,
+} from '../../lib/money.js';
 import { nextNumber } from '../../lib/numbering.js';
 import { conflict, notFound, badRequest } from '../../lib/errors.js';
 import { enqueue } from '../../lib/queue.js';
@@ -15,6 +17,8 @@ export interface InvoiceLineInput {
   taxRateBp: number;
   taxTreatment?: TaxTreatment;
   taxReason?: string | null;
+  lineKind?: LineKind;
+  taxExemptionCertificate?: string | null;
 }
 
 export interface CreateInvoiceInput {
@@ -28,6 +32,10 @@ export interface CreateInvoiceInput {
   issueDate?: string;
   dueDate?: string | null;
   notes?: string | null;
+  /** When the work was performed, if it differs from the job's own dates. */
+  serviceDate?: string | null;
+  /** 'lump_sum' | 'separated' | 'not_specified'. A tax election in some states. */
+  contractType?: string;
 }
 
 const toLineInputs = (lines: InvoiceLineInput[]): LineInput[] =>
@@ -38,6 +46,8 @@ const toLineInputs = (lines: InvoiceLineInput[]): LineInput[] =>
     taxRateBp: l.taxRateBp,
     taxTreatment: l.taxTreatment ?? 'taxable',
     taxReason: l.taxReason ?? null,
+    lineKind: l.lineKind ?? 'other',
+    taxExemptionCertificate: l.taxExemptionCertificate ?? null,
   }));
 
 export async function createInvoice(
@@ -54,10 +64,12 @@ export async function createInvoice(
     let quoteId: string | null = null;
     let currency = input.currency ?? 'USD';
     let discountCents = input.discountCents ?? 0;
+    let contractType = input.contractType ?? 'not_specified';
 
     if (input.fromQuoteId) {
       const { rows } = await c.query<any>(
-        `SELECT q.id, q.status, q.job_id, q.currency, q.discount_cents, j.client_id
+        `SELECT q.id, q.status, q.job_id, q.currency, q.discount_cents, q.contract_type,
+                j.client_id
            FROM quotes q JOIN jobs j ON j.id = q.job_id
           WHERE q.id = $1 AND q.provider_id = $2`,
         [input.fromQuoteId, providerId],
@@ -79,7 +91,8 @@ export async function createInvoice(
         // The tax treatment and its reason travel with the line. Copying only
         // the rate would silently re-tax a line the customer accepted as
         // exempt, and lose the evidence for why it was not taxed.
-        `SELECT description, quantity, unit_price_cents, tax_rate_bp, tax_treatment, tax_reason
+        `SELECT description, quantity, unit_price_cents, tax_rate_bp, tax_treatment, tax_reason,
+                line_kind, tax_exemption_certificate
            FROM quote_items WHERE quote_id = $1 ORDER BY sort_order`,
         [input.fromQuoteId],
       );
@@ -90,12 +103,18 @@ export async function createInvoice(
         taxRateBp: i.tax_rate_bp,
         taxTreatment: i.tax_treatment as TaxTreatment,
         taxReason: i.tax_reason,
+        // Materials-or-labour is the fact the state rules turn on. Dropping it
+        // here would leave the invoice unable to explain a treatment the quote
+        // could.
+        lineKind: i.line_kind,
+        taxExemptionCertificate: i.tax_exemption_certificate,
       }));
       jobId = quote.job_id;
       clientId = quote.client_id;
       quoteId = quote.id;
       currency = quote.currency;
       discountCents = quote.discount_cents;
+      contractType = quote.contract_type ?? 'not_specified';
     } else {
       if (!lines.length) throw badRequest('Add at least one line item.');
       if (jobId) {
@@ -111,6 +130,34 @@ export async function createInvoice(
         clientId, providerId,
       ]);
       if (!owned.rows.length) throw notFound('That client was not found.');
+    }
+
+    // Where the work was performed, snapshot at issue. Most states source
+    // sales tax to this rather than to the provider's own registration, and a
+    // job's address can be edited afterwards — the issued document must not
+    // move with it.
+    let service: {
+      address_line: string | null; city: string | null;
+      region: string | null; postal_code: string | null; service_date: string | null;
+    } = { address_line: null, city: null, region: null, postal_code: null, service_date: null };
+
+    if (jobId) {
+      const { rows: jobRows } = await c.query<any>(
+        `SELECT address_line, city, region, postal_code,
+                COALESCE(completed_at, scheduled_start)::date AS service_date
+           FROM jobs WHERE id = $1 AND provider_id = $2`,
+        [jobId, providerId],
+      );
+      if (jobRows[0]) service = jobRows[0];
+    }
+    if (!service.address_line && clientId) {
+      // Falling back to the client's own address is a guess, so it is only
+      // taken when the job recorded nothing at all.
+      const { rows: clientRows } = await c.query<any>(
+        'SELECT address_line, city, region, postal_code FROM clients WHERE id = $1',
+        [clientId],
+      );
+      if (clientRows[0]) service = { ...service, ...clientRows[0] };
     }
 
     const totals = computeTotals(toLineInputs(lines), discountCents);
@@ -129,15 +176,18 @@ export async function createInvoice(
       `INSERT INTO invoices (provider_id, job_id, quote_id, client_id, number, status, currency,
                              issue_date, due_date, subtotal_cents, discount_cents, tax_cents,
                              total_cents, notes, taxable_base_cents, untaxed_base_cents,
-                             tax_jurisdiction)
+                             tax_jurisdiction, service_address_line, service_city,
+                             service_region, service_postal_code, service_date, contract_type)
        VALUES ($1,$2,$3,$4,$5,'draft',$6, COALESCE($7::date, CURRENT_DATE),
-               $8,$9,$10,$11,$12,$13,$14,$15,$16)
+               $8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        RETURNING id, created_at`,
       [providerId, jobId, quoteId, clientId, number, currency,
        input.issueDate ?? null, input.dueDate ?? null,
        totals.subtotalCents, totals.discountCents, totals.taxCents, totals.totalCents,
        input.notes ?? null,
-       totals.taxableBaseCents, totals.untaxedBaseCents, jurisdiction],
+       totals.taxableBaseCents, totals.untaxedBaseCents, jurisdiction,
+       service.address_line, service.city, service.region, service.postal_code,
+       input.serviceDate ?? service.service_date, contractType],
     );
     const invoiceId = rows[0].id;
 
@@ -146,12 +196,14 @@ export async function createInvoice(
         `INSERT INTO invoice_items (invoice_id, description, quantity, unit_price_cents,
                                     tax_rate_bp, line_total_cents, sort_order,
                                     tax_treatment, tax_reason, line_discount_cents,
-                                    line_taxable_base_cents, line_tax_cents)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                                    line_taxable_base_cents, line_tax_cents,
+                                    line_kind, tax_exemption_certificate)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [invoiceId, line.description, line.quantity, line.unitPriceCents,
          line.taxRateBp, line.lineTotalCents, index,
          line.taxTreatment, line.taxReason ?? null, line.lineDiscountCents,
-         line.lineTaxableBaseCents, line.lineTaxCents],
+         line.lineTaxableBaseCents, line.lineTaxCents,
+         line.lineKind, line.taxExemptionCertificate ?? null],
       );
     }
 
@@ -244,11 +296,31 @@ export async function getInvoice(invoiceId: string, viewer: { providerId?: strin
   if (!isOwner && !isCustomer) throw notFound('That invoice was not found.');
   if (!isOwner && inv.status === 'draft') throw notFound('That invoice was not found.');
 
+  // The customer opening the invoice is the one signal that separates "they
+  // have not looked" from "they are not paying", and it changes how a provider
+  // chases it. `first_viewed_at` has existed since the tax migration and was
+  // never written, so the two were indistinguishable.
+  //
+  // Only the first view moves the status, and only from 'sent': a partially
+  // paid invoice being re-read must not walk backwards.
+  if (isCustomer && !inv.first_viewed_at) {
+    await db.query(
+      `UPDATE invoices
+          SET first_viewed_at = now(),
+              status = CASE WHEN status = 'sent' THEN 'viewed' ELSE status END,
+              updated_at = now()
+        WHERE id = $1 AND first_viewed_at IS NULL`,
+      [invoiceId],
+    );
+    if (inv.status === 'sent') inv.status = 'viewed';
+    inv.first_viewed_at = new Date().toISOString();
+  }
+
   const [items, payments] = await Promise.all([
     db.query<any>(
       `SELECT description, quantity, unit_price_cents, tax_rate_bp, line_total_cents,
               tax_treatment, tax_reason, line_discount_cents, line_taxable_base_cents,
-              line_tax_cents
+              line_tax_cents, line_kind, tax_exemption_certificate
          FROM invoice_items WHERE invoice_id = $1 ORDER BY sort_order`,
       [invoiceId],
     ),
@@ -275,7 +347,18 @@ export async function getInvoice(invoiceId: string, viewer: { providerId?: strin
     balanceCents: inv.total_cents - inv.amount_paid_cents,
     notes: inv.notes,
     sentAt: inv.sent_at,
+    firstViewedAt: inv.first_viewed_at,
     paidAt: inv.paid_at,
+    serviceDate: inv.service_date,
+    contractType: inv.contract_type,
+    serviceAddress: inv.service_address_line || inv.service_region
+      ? {
+          addressLine: inv.service_address_line,
+          city: inv.service_city,
+          region: inv.service_region,
+          postalCode: inv.service_postal_code,
+        }
+      : null,
     createdAt: inv.created_at,
     pdfUrl: inv.pdf_key ? signStorageUrl(inv.pdf_key) : null,
     pdfSha256: inv.pdf_sha256,
@@ -308,6 +391,11 @@ export async function getInvoice(invoiceId: string, viewer: { providerId?: strin
       lineDiscountCents: i.line_discount_cents,
       lineTaxableBaseCents: i.line_taxable_base_cents,
       lineTaxCents: i.line_tax_cents,
+      // What the line is, and the certificate behind any relief. The columns
+      // were being written and selected but never returned, so the app and the
+      // customer's copy could not show the basis of the treatment they state.
+      lineKind: i.line_kind,
+      taxExemptionCertificate: i.tax_exemption_certificate,
     })),
     payments: payments.rows.map((p) => ({
       // The id is what a reprint addresses; without it a receipt can be

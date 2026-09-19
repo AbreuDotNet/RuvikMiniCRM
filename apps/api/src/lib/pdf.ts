@@ -24,11 +24,18 @@ export interface DocumentLine {
   description: string;
   quantity: number;
   unitPriceCents: number;
+  /** The rate stored on the line, which is not always the rate applied. */
   taxRateBp: number;
   lineTotalCents: number;
-  taxTreatment?: 'taxable' | 'exempt' | 'not_subject';
-  /** Printed beneath the line when no tax was charged. */
+  taxTreatment?: 'taxable' | 'exempt' | 'not_subject' | 'manual_adjustment';
+  /** Printed beneath the line when tax was relieved or adjusted. */
   taxReason?: string | null;
+  /** Tax actually charged on this line. Printed instead of a bare rate. */
+  lineTaxCents?: number;
+  /** What the line is: materials, labour, and so on. */
+  lineKind?: string | null;
+  /** Certificate reference justifying relief, where a state requires one. */
+  taxExemptionCertificate?: string | null;
 }
 
 export interface RenderDocumentInput {
@@ -52,11 +59,80 @@ export interface RenderDocumentInput {
   untaxedBaseCents?: number;
   /** Two-letter state the document was priced under, if recorded. */
   taxJurisdiction?: string | null;
+  /** Where the work was performed. Most states source the tax to this. */
+  serviceAddress?: DocumentParty | null;
+  /** When the work was performed, which is not the issue date. */
+  serviceDate?: string | null;
+  /** 'lump_sum' | 'separated' | 'not_specified' — a tax election in some states. */
+  contractType?: string | null;
   amountPaidCents?: number;
   notes?: string | null;
   terms?: string | null;
   /** Rendered into the footer so a printed copy can be checked against the API. */
   verificationUrl?: string | null;
+}
+
+/* ------------------------------ tax labels -------------------------------- */
+
+const KIND_LABELS: Record<string, string> = {
+  materials: 'Materials',
+  labour: 'Labour',
+  equipment: 'Equipment',
+  fee: 'Fee',
+  reimbursement: 'Reimbursement',
+  deposit: 'Deposit',
+};
+
+/**
+ * A percentage that does not lie.
+ *
+ * This used to be `(bp / 100).toFixed(0)`, which printed an 8.25% rate as
+ * "8%" on the customer's copy of the invoice while charging 8.25%. Trailing
+ * zeros are trimmed so a flat 7% does not read as "7.00%".
+ */
+export function formatRateBp(bp: number): string {
+  const text = (bp / 100).toFixed(2);
+  // Trailing zeros trimmed without a regex: '7.00' reads as a rate somebody
+  // configured to two decimals, which they did not.
+  const trimmed = text.endsWith('00') ? text.slice(0, -3)
+    : text.endsWith('0') ? text.slice(0, -1)
+      : text;
+  return `${trimmed}%`;
+}
+
+/**
+ * What goes in the TAX column.
+ *
+ * A relieved line shows no rate at all. Printing the stored rate next to a
+ * line that was charged nothing — which is what happened before — invites the
+ * reader to conclude the arithmetic is wrong.
+ */
+export function lineTaxLabel(line: DocumentLine, money: (cents: number) => string): string {
+  const charged = line.taxTreatment === undefined
+    || line.taxTreatment === 'taxable'
+    || line.taxTreatment === 'manual_adjustment';
+
+  if (!charged) return '—';
+  if (line.taxRateBp <= 0) return '—';
+  return typeof line.lineTaxCents === 'number'
+    ? `${formatRateBp(line.taxRateBp)}  ${money(line.lineTaxCents)}`
+    : formatRateBp(line.taxRateBp);
+}
+
+/** The sentence under a line explaining relief, adjustment, or its kind. */
+export function relievedNote(line: DocumentLine): string | null {
+  const kind = line.lineKind && KIND_LABELS[line.lineKind] ? KIND_LABELS[line.lineKind] : null;
+  const parts: string[] = [];
+
+  if (line.taxTreatment === 'exempt') parts.push('Exempt');
+  else if (line.taxTreatment === 'not_subject') parts.push('Not subject to sales tax');
+  else if (line.taxTreatment === 'manual_adjustment') parts.push('Tax adjusted manually');
+
+  if (line.taxReason) parts.push(line.taxReason);
+  if (line.taxExemptionCertificate) parts.push(`Certificate ${line.taxExemptionCertificate}`);
+
+  if (!parts.length) return kind;
+  return kind ? `${kind} · ${parts.join(' — ')}` : parts.join(' — ');
 }
 
 export interface RenderedDocument {
@@ -132,28 +208,49 @@ export async function renderDocument(input: RenderDocumentInput): Promise<Render
 
   y = Math.max(fy, ty) + 14;
 
+  /* ---------------------------- work location ---------------------------- */
+  // Printed whenever it differs from the billing address. Most states source
+  // sales tax to where the work was performed rather than to where the bill
+  // was sent, so a document that shows only "bill to" cannot be checked
+  // against the rate that was charged.
+  const svc = input.serviceAddress;
+  const svcLines = svc
+    ? [svc.addressLine, [svc.city, svc.name].filter(Boolean).join(', ')].filter(Boolean) as string[]
+    : [];
+  const billLines = [input.to.addressLine, input.to.city].filter(Boolean).join(' ').toLowerCase();
+  const sameAsBilling = svcLines.join(' ').toLowerCase() === billLines;
+
+  if (svcLines.length && !sameAsBilling) {
+    doc.fontSize(8).font('Helvetica-Bold').fillColor(BRAND.muted).text('WORK PERFORMED AT', left, y);
+    doc.fontSize(9).font('Helvetica').fillColor(BRAND.ink);
+    let sy = y + 13;
+    for (const line of svcLines) { doc.text(line, left, sy, { width: pageWidth * 0.7 }); sy += 12; }
+    y = sy + 8;
+  }
+
   /* -------------------------------- dates -------------------------------- */
   doc.rect(left, y, pageWidth, 30).fill(BRAND.panel);
   doc.fontSize(9).font('Helvetica').fillColor(BRAND.muted);
   doc.text(`Issued  ${input.issueDate}`, left + 12, y + 11);
   if (input.dueDate) doc.text(`Due  ${input.dueDate}`, left + 180, y + 11);
   if (input.validUntil) doc.text(`Valid until  ${input.validUntil}`, left + 180, y + 11);
+  if (input.serviceDate) doc.text(`Service  ${input.serviceDate}`, left + 340, y + 11);
   y += 48;
 
   /* ----------------------------- line items ------------------------------ */
   const cols = {
     desc: left,
-    qty: left + pageWidth * 0.54,
-    unit: left + pageWidth * 0.66,
-    tax: left + pageWidth * 0.80,
+    qty: left + pageWidth * 0.50,
+    unit: left + pageWidth * 0.60,
+    tax: left + pageWidth * 0.72,
     total: left,
   };
 
   doc.fontSize(8).font('Helvetica-Bold').fillColor(BRAND.muted);
   doc.text('DESCRIPTION', cols.desc, y);
-  doc.text('QTY', cols.qty, y, { width: 40, align: 'right' });
-  doc.text('UNIT', cols.unit, y, { width: 70, align: 'right' });
-  doc.text('TAX', cols.tax, y, { width: 36, align: 'right' });
+  doc.text('QTY', cols.qty, y, { width: 36, align: 'right' });
+  doc.text('UNIT', cols.unit, y, { width: 66, align: 'right' });
+  doc.text('TAX', cols.tax, y, { width: 78, align: 'right' });
   doc.text('AMOUNT', cols.total, y, { width: pageWidth, align: 'right' });
   y += 14;
   doc.moveTo(left, y).lineTo(right, y).strokeColor(BRAND.hairline).lineWidth(1).stroke();
@@ -168,13 +265,24 @@ export async function renderDocument(input: RenderDocumentInput): Promise<Render
     const descHeight = doc.heightOfString(line.description, { width: pageWidth * 0.5 });
     doc.fillColor(BRAND.ink).text(line.description, cols.desc, y, { width: pageWidth * 0.5 });
     doc.fillColor(BRAND.muted);
-    doc.text(String(line.quantity), cols.qty, y, { width: 40, align: 'right' });
-    doc.text(money(line.unitPriceCents), cols.unit, y, { width: 70, align: 'right' });
-    doc.text(`${(line.taxRateBp / 100).toFixed(0)}%`, cols.tax, y, { width: 36, align: 'right' });
+    doc.text(String(line.quantity), cols.qty, y, { width: 36, align: 'right' });
+    doc.text(money(line.unitPriceCents), cols.unit, y, { width: 66, align: 'right' });
+    doc.text(lineTaxLabel(line, money), cols.tax, y, { width: 78, align: 'right' });
     doc.fillColor(BRAND.ink).font('Helvetica-Bold')
        .text(money(line.lineTotalCents), cols.total, y, { width: pageWidth, align: 'right' });
     doc.font('Helvetica');
     y += Math.max(descHeight, 12) + 10;
+
+    // Why this line was not taxed, or what was adjusted. The interface has
+    // always carried it and the renderer never printed it, so the one thing an
+    // auditor asks for was the one thing missing from the document they read.
+    const note = relievedNote(line);
+    if (note) {
+      doc.fontSize(8).fillColor(BRAND.muted)
+         .text(note, cols.desc + 8, y - 6, { width: pageWidth * 0.62 });
+      y += doc.heightOfString(note, { width: pageWidth * 0.62 }) + 4;
+      doc.fontSize(9.5).fillColor(BRAND.ink);
+    }
   }
 
   /* ------------------------------- totals -------------------------------- */
@@ -215,6 +323,23 @@ export async function renderDocument(input: RenderDocumentInput): Promise<Render
   if (typeof input.amountPaidCents === 'number' && input.amountPaidCents > 0) {
     totalRow('Paid', money(input.amountPaidCents));
     totalRow('Balance due', money(Math.max(0, input.totalCents - input.amountPaidCents)), true);
+  }
+
+  // Some states treat how the job was priced as a tax election in itself:
+  // under a Texas lump-sum contract the contractor pays the tax on materials
+  // at purchase and charges the customer none, while a separated contract
+  // collects it from the customer. Saying which one this is on the face of the
+  // document is what makes the tax line reconcilable later.
+  if (input.contractType && input.contractType !== 'not_specified') {
+    y += 6;
+    doc.fontSize(8).font('Helvetica').fillColor(BRAND.muted)
+       .text(
+         input.contractType === 'lump_sum'
+           ? 'Priced as a lump-sum contract.'
+           : 'Priced as a separated contract: materials and labour are stated separately.',
+         left, y, { width: pageWidth, align: 'right' },
+       );
+    y += 14;
   }
 
   /* -------------------------- notes and terms ---------------------------- */

@@ -8,6 +8,7 @@ export type QueueName =
   | 'email.send'
   | 'notification.push'
   | 'billing.renew'
+  | 'billing.grace_expired'
   | 'invoice.overdue'
   | 'file.scan';
 

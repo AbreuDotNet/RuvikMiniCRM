@@ -1,9 +1,40 @@
-import { getDb } from '../../db/index.js';
+import { getDb, type Queryable } from '../../db/index.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { writeAudit } from '../../lib/audit.js';
 import { enqueue } from '../../lib/queue.js';
 import { notify } from '../notifications/service.js';
 import { randomToken } from '../../lib/crypto.js';
+
+/**
+ * Days a provider keeps their listing after a charge fails.
+ *
+ * A failed payment is far more often an expired card than a decision to leave,
+ * so the listing does not vanish the same afternoon. It does have to vanish
+ * eventually, or the subscription means nothing.
+ */
+export const GRACE_DAYS = 7;
+
+const periodInterval = (interval: string) => (interval === 'year' ? '1 year' : '1 month');
+const periodDays = (interval: string) => (interval === 'year' ? 365 : 30);
+
+/** Books the renewal check just after the period ends. */
+async function scheduleRenewal(c: Queryable, subscriptionId: string, interval: string) {
+  await enqueue('billing.renew', { subscriptionId }, {
+    runAt: new Date(Date.now() + periodDays(interval) * 86_400_000),
+    dedupeKey: `renew:${subscriptionId}`,
+  }, c);
+}
+
+/**
+ * Starts the clock on the grace window. Deduped per subscription, so a run of
+ * failed charges cannot stack up several expiries against the same account.
+ */
+export async function scheduleGraceExpiry(c: Queryable, subscriptionId: string) {
+  await enqueue('billing.grace_expired', { subscriptionId }, {
+    runAt: new Date(Date.now() + GRACE_DAYS * 86_400_000),
+    dedupeKey: `grace:${subscriptionId}`,
+  }, c);
+}
 
 export async function listPlans() {
   const db = await getDb();
@@ -68,11 +99,18 @@ export async function getSubscription(providerId: string) {
 }
 
 /**
- * Starts a subscription in `pending_payment` and returns a checkout intent.
+ * Starts a subscription and returns a checkout intent.
  *
- * The account only becomes active when the payment provider's signed webhook
- * confirms the charge — never on the client's say-so, which is what stops a
- * forged success callback from granting a free subscription.
+ * A priced plan lands in `pending_payment` and only becomes active when the
+ * payment provider's signed webhook confirms the charge — never on the
+ * client's say-so, which is what stops a forged success callback from granting
+ * a paid subscription.
+ *
+ * A free plan is activated here instead. There is nothing to charge, so no
+ * webhook is ever coming, and waiting for one stranded every free-plan
+ * provider in `pending_payment` permanently. The rule is unchanged for
+ * anything with a price; what makes this safe is that the price is read from
+ * the plans table on the server, never from the request.
  */
 export async function startSubscription(
   providerId: string,
@@ -104,6 +142,35 @@ export async function startSubscription(
       ]);
     }
 
+    const planSummary = {
+      code: plan.code, name: plan.name, priceCents: plan.price_cents, currency: plan.currency,
+    };
+
+    if (plan.price_cents === 0) {
+      const { rows } = await c.query<{ id: string }>(
+        `INSERT INTO subscriptions (provider_id, plan_id, status,
+                                    current_period_start, current_period_end)
+         VALUES ($1,$2,'active', now(), now() + $3::interval) RETURNING id`,
+        [providerId, plan.id, periodInterval(plan.interval)],
+      );
+      // No payments row: nothing was charged, and inventing a zero-value
+      // "succeeded" payment would put a phantom line in their billing history.
+      await scheduleRenewal(c, rows[0].id, plan.interval);
+
+      await writeAudit({
+        actorUserId, actorRole: 'provider', action: 'subscription.started_free',
+        entityType: 'subscription', entityId: rows[0].id,
+        metadata: { plan: plan.code },
+      }, c);
+
+      return {
+        subscriptionId: rows[0].id,
+        status: 'active' as const,
+        plan: planSummary,
+        checkout: null,
+      };
+    }
+
     const externalRef = `sub_${randomToken(12)}`;
     const { rows } = await c.query<{ id: string }>(
       `INSERT INTO subscriptions (provider_id, plan_id, status, external_ref)
@@ -126,7 +193,7 @@ export async function startSubscription(
     return {
       subscriptionId: rows[0].id,
       status: 'pending_payment' as const,
-      plan: { code: plan.code, name: plan.name, priceCents: plan.price_cents, currency: plan.currency },
+      plan: planSummary,
       // The client redirects here; the platform trusts only the webhook.
       checkout: {
         reference: externalRef,
@@ -158,14 +225,13 @@ export async function activateSubscription(externalRef: string, paidAmountCents:
       throw conflict('Payment amount does not cover the plan price.');
     }
 
-    const interval = sub.interval === 'year' ? '1 year' : '1 month';
     await c.query(
       `UPDATE subscriptions SET status = 'active',
               current_period_start = now(),
               current_period_end = now() + $2::interval,
               updated_at = now()
         WHERE id = $1`,
-      [sub.id, interval],
+      [sub.id, periodInterval(sub.interval)],
     );
     await c.query(
       `UPDATE payments SET status = 'succeeded', paid_at = now()
@@ -186,11 +252,10 @@ export async function activateSubscription(externalRef: string, paidAmountCents:
       metadata: { externalRef, amountCents: paidAmountCents },
     }, c);
 
-    // Schedule the renewal check just after the period ends.
-    await enqueue('billing.renew', { subscriptionId: sub.id }, {
-      runAt: new Date(Date.now() + (sub.interval === 'year' ? 365 : 30) * 86_400_000),
-      dedupeKey: `renew:${sub.id}`,
-    }, c);
+    // Schedule the renewal check just after the period ends. A grace-expiry
+    // job left over from the failed charge this payment is settling stays
+    // queued; its handler sees the subscription is active again and stops.
+    await scheduleRenewal(c, sub.id, sub.interval);
 
     return { id: sub.id, status: 'active', alreadyActive: false };
   });
@@ -212,15 +277,21 @@ export async function markPaymentFailed(externalRef: string, reason: string) {
       `UPDATE payments SET status = 'failed', failure_reason = $2 WHERE external_ref = $1`,
       [externalRef, reason.slice(0, 300)],
     );
+    // The listing stays up for the grace window; this books the moment it
+    // comes down if nothing is paid before then.
+    await scheduleGraceExpiry(c, rows[0].id);
+
     await notify(rows[0].user_id, {
       type: 'subscription.payment_failed',
       title: 'Payment failed',
-      body: 'We could not process your subscription payment. Please update your billing details.',
+      body: `We could not process your subscription payment. Please update your billing `
+        + `details within ${GRACE_DAYS} days to stay listed in search.`,
       data: { subscriptionId: rows[0].id },
     }, c);
     await writeAudit({
       actorUserId: null, actorRole: 'system', action: 'subscription.payment_failed',
-      entityType: 'subscription', entityId: rows[0].id, metadata: { externalRef, reason },
+      entityType: 'subscription', entityId: rows[0].id,
+      metadata: { externalRef, reason, graceDays: GRACE_DAYS },
     }, c);
   });
 }

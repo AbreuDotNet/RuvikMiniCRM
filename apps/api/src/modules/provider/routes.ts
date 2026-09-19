@@ -12,6 +12,7 @@ import { writeAudit } from '../../lib/audit.js';
 import { signStorageUrl } from '../../lib/storage.js';
 import { paginationSchema, decodeCursor, buildPage } from '../../lib/pagination.js';
 import { taxProviderFor, type LineKind } from '../../lib/tax/provider.js';
+import { OPEN_INVOICE_STATUSES, sqlIn } from '../../lib/invoiceStatus.js';
 
 export const providerRouter = Router();
 providerRouter.use(authenticate, requireProvider);
@@ -378,11 +379,21 @@ providerRouter.post(
     const db = await getDb();
 
     // Plan limits are enforced server-side, never in the client.
+    //
+    // The fallback matters as much as the lookup. This used to read only the
+    // live subscription and skip the check entirely when there was no row —
+    // so a provider without a plan got *unlimited* listings while a paying
+    // one was capped. Falling back to the cheapest active plan closes it: an
+    // unknown plan is treated as the most restrictive one, not as no plan.
     const { rows: planRows } = await db.query<{ max_services: number | null; count: string }>(
-      `SELECT sp.max_services,
-              (SELECT count(*)::text FROM services WHERE provider_id = $1) AS count
-         FROM subscriptions s JOIN subscription_plans sp ON sp.id = s.plan_id
-        WHERE s.provider_id = $1 AND s.status IN ('active','trialing')`,
+      `SELECT COALESCE(
+                (SELECT sp.max_services
+                   FROM subscriptions s JOIN subscription_plans sp ON sp.id = s.plan_id
+                  WHERE s.provider_id = $1 AND s.status IN ('active','trialing')),
+                (SELECT sp.max_services FROM subscription_plans sp
+                  WHERE sp.is_active = true ORDER BY sp.price_cents, sp.sort_order LIMIT 1)
+              ) AS max_services,
+              (SELECT count(*)::text FROM services WHERE provider_id = $1) AS count`,
       [providerId],
     );
     const plan = planRows[0];
@@ -494,7 +505,7 @@ providerRouter.get(
       db.query<{ outstanding: string; overdue: string }>(
         `SELECT
            COALESCE(sum(total_cents - amount_paid_cents) FILTER
-             (WHERE status IN ('sent','partially_paid','overdue')), 0)::text AS outstanding,
+             (WHERE status IN ${sqlIn(OPEN_INVOICE_STATUSES)}), 0)::text AS outstanding,
            COALESCE(sum(total_cents - amount_paid_cents) FILTER
              (WHERE status = 'overdue'), 0)::text AS overdue
          FROM invoices WHERE provider_id = $1`,

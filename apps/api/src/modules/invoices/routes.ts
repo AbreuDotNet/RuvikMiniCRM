@@ -3,6 +3,9 @@ import { z } from 'zod';
 import * as svc from './service.js';
 import { getDb } from '../../db/index.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
+import {
+  INVOICE_STATUSES, OPEN_INVOICE_STATUSES, sqlIn,
+} from '../../lib/invoiceStatus.js';
 import { authenticate, requireProvider, tenantId } from '../../middleware/auth.js';
 import { limiters } from '../../middleware/rateLimit.js';
 import { idempotency } from '../../middleware/idempotency.js';
@@ -36,7 +39,7 @@ invoicesRouter.get(
   requireProvider,
   validate(
     paginationSchema.extend({
-      status: z.enum(['draft', 'sent', 'partially_paid', 'paid', 'overdue', 'void']).optional(),
+      status: z.enum(INVOICE_STATUSES).optional(),
       jobId: uuidSchema.optional(),
     }),
     'query',
@@ -70,7 +73,7 @@ invoicesRouter.get(
 
     const totals = await db.query<{ outstanding: string; paid: string }>(
       `SELECT COALESCE(sum(total_cents - amount_paid_cents) FILTER
-                (WHERE status IN ('sent','partially_paid','overdue')), 0)::text AS outstanding,
+                (WHERE status IN ${sqlIn(OPEN_INVOICE_STATUSES)}), 0)::text AS outstanding,
               COALESCE(sum(total_cents) FILTER (WHERE status = 'paid'), 0)::text AS paid
          FROM invoices WHERE provider_id = $1`,
       [tenantId(req)],

@@ -5,7 +5,9 @@ import { asyncHandler } from '../../middleware/errorHandler.js';
 import { authenticate, requireRole } from '../../middleware/auth.js';
 import { limiters } from '../../middleware/rateLimit.js';
 import { idempotency } from '../../middleware/idempotency.js';
-import { validate, validated, uuidSchema, safeText, phoneSchema } from '../../middleware/validate.js';
+import {
+  validate, validated, uuidSchema, safeText, phoneSchema, usStateSchema,
+} from '../../middleware/validate.js';
 import { paginationSchema, decodeCursor, buildPage } from '../../lib/pagination.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { nextNumber } from '../../lib/numbering.js';
@@ -26,6 +28,10 @@ const requestSchema = z.object({
   description: safeText(2000, 10),
   addressLine: safeText(200).optional().nullable(),
   city: safeText(80).optional().nullable(),
+  // The state the work is in. Sales tax is sourced to where the job is, and a
+  // city name does not identify a jurisdiction on its own.
+  region: usStateSchema.optional().nullable(),
+  postalCode: safeText(20).optional().nullable(),
   phone: phoneSchema.optional(),
   preferredDate: z.string().datetime().optional().nullable(),
 });
@@ -69,24 +75,34 @@ customerRouter.post(
 
       // One client record per (provider, platform customer).
       const { rows: clientRows } = await c.query<{ id: string }>(
-        `INSERT INTO clients (provider_id, user_id, full_name, email, phone_e164, address_line, city)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO clients (provider_id, user_id, full_name, email, phone_e164, address_line,
+                              city, region, postal_code)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          ON CONFLICT (provider_id, user_id) WHERE user_id IS NOT NULL
-         DO UPDATE SET full_name = EXCLUDED.full_name, updated_at = now()
+         DO UPDATE SET full_name = EXCLUDED.full_name,
+                       -- A returning customer may be at a different address, and
+                       -- the newest request is the better answer for the next job.
+                       address_line = COALESCE(EXCLUDED.address_line, clients.address_line),
+                       city = COALESCE(EXCLUDED.city, clients.city),
+                       region = COALESCE(EXCLUDED.region, clients.region),
+                       postal_code = COALESCE(EXCLUDED.postal_code, clients.postal_code),
+                       updated_at = now()
          RETURNING id`,
         [b.providerId, req.auth!.userId, me.full_name, me.email,
-         b.phone ?? me.phone_e164, b.addressLine ?? null, b.city ?? null],
+         b.phone ?? me.phone_e164, b.addressLine ?? null, b.city ?? null,
+         b.region ?? null, b.postalCode ?? null],
       );
 
       const reference = await nextNumber(c, b.providerId, 'job');
       const { rows: jobRows } = await c.query<{ id: string }>(
         `INSERT INTO jobs (provider_id, client_id, customer_user_id, service_id, reference,
-                           title, description, address_line, city, scheduled_start,
-                           source, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'quote_request','new_lead')
+                           title, description, address_line, city, region, postal_code,
+                           scheduled_start, source, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'quote_request','new_lead')
          RETURNING id`,
         [b.providerId, clientRows[0].id, req.auth!.userId, b.serviceId ?? null, reference,
-         b.title, b.description, b.addressLine ?? null, b.city ?? null, b.preferredDate ?? null],
+         b.title, b.description, b.addressLine ?? null, b.city ?? null,
+         b.region ?? null, b.postalCode ?? null, b.preferredDate ?? null],
       );
 
       await c.query(
