@@ -194,14 +194,14 @@ function UserModal({
   user, onClose, onDone,
 }: { user: AdminUser | null; onClose: () => void; onDone: () => void }) {
   const { notify } = useToast();
-  const { sessionAal } = useAuth();
+  const { canAdminWrite } = useAuth();
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<UserStatusAction | null>(null);
 
-  // Every state-changing admin route is gated on requireMfa, so say so before
-  // a reason is typed rather than after a 403 comes back.
-  const mfaReady = sessionAal === 'mfa';
+  // Whether the server would accept a write from this session at all, so the
+  // reason is never typed into a form that is going to be refused.
+  const mfaReady = canAdminWrite;
   const tooShort = reason.trim().length < MIN_REASON_LENGTH;
 
   const setStatus = async (action: UserStatusAction) => {

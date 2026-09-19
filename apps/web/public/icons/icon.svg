@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#3C5A7D"/><path d="M11 9l5 5-2 2-5-5a3 3 0 012-2z" fill="#fff"/><path d="M21 9a4 4 0 00-5 5l-6 6 2 2 6-6a4 4 0 005-5l-2 2-2-2 2-2z" fill="#C4623F"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Ruvik</title>
+  <rect width="64" height="64" rx="18" fill="#3C5A7D"/>
+  <!-- The solid stem and open counter make the R readable at favicon size. -->
+  <rect x="14" y="13" width="10" height="38" rx="5" fill="#FFFFFF"/>
+  <path d="M23 14h13.5C45 14 51 19.2 51 27s-6 13-14.5 13H23V31h13.1c3.3 0 5.4-1.5 5.4-4s-2.1-4-5.4-4H23z" fill="#FFFFFF"/>
+  <!-- Terracotta turns the R leg into a forward-moving connection: customer to pro. -->
+  <path d="M31.5 36.5 48 53" stroke="#C4623F" stroke-width="10" stroke-linecap="round"/>
+</svg>

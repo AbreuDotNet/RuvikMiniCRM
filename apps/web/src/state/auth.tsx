@@ -35,6 +35,14 @@ interface AuthContextValue {
    * Null until /auth/me has answered.
    */
   sessionAal: 'aal1' | 'mfa' | null;
+  /**
+   * Whether this deployment demands a two-factor session for admin writes.
+   * Null until /auth/me answers; assumed true until then, so the panel never
+   * offers an action before it knows it is allowed.
+   */
+  adminMfaRequired: boolean | null;
+  /** Shorthand: may this session perform state-changing admin actions? */
+  canAdminWrite: boolean;
   login: (email: string, password: string) => Promise<{ mfaRequired: boolean; mfaToken?: string }>;
   verifyMfa: (mfaToken: string, code: string) => Promise<void>;
   signup: (input: SignupInput) => Promise<void>;
@@ -55,6 +63,7 @@ export interface SignupInput {
 interface MeResponse {
   user: AuthUser;
   sessionAal?: 'aal1' | 'mfa';
+  adminMfaRequired?: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -63,11 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthContextValue['status']>('loading');
   const [sessionAal, setSessionAal] = useState<'aal1' | 'mfa' | null>(null);
+  const [adminMfaRequired, setAdminMfaRequired] = useState<boolean | null>(null);
 
   const clearSession = useCallback(() => {
     setAccessToken(null);
     setUser(null);
     setSessionAal(null);
+    setAdminMfaRequired(null);
     setStatus('anonymous');
   }, []);
 
@@ -97,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setUser(me.user);
         setSessionAal(me.sessionAal ?? 'aal1');
+        setAdminMfaRequired(me.adminMfaRequired ?? true);
         setStatus('authenticated');
       } catch {
         if (!cancelled) clearSession();
@@ -144,11 +156,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const me = await api.get<MeResponse>('/auth/me');
     setUser(me.user);
     setSessionAal(me.sessionAal ?? 'aal1');
+    setAdminMfaRequired(me.adminMfaRequired ?? true);
   }, []);
 
+  // Unknown is treated as required: the panel never offers an action before it
+  // knows the server would accept it.
+  const canAdminWrite = sessionAal === 'mfa' || adminMfaRequired === false;
+
   const value = useMemo(
-    () => ({ user, status, sessionAal, login, verifyMfa, signup, logout, refreshUser }),
-    [user, status, sessionAal, login, verifyMfa, signup, logout, refreshUser],
+    () => ({
+      user, status, sessionAal, adminMfaRequired, canAdminWrite,
+      login, verifyMfa, signup, logout, refreshUser,
+    }),
+    [user, status, sessionAal, adminMfaRequired, canAdminWrite,
+     login, verifyMfa, signup, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

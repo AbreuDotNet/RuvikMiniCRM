@@ -315,7 +315,7 @@ function ProviderReview({
   onClose: () => void;
   onChanged: (message: string) => void;
 }) {
-  const { sessionAal } = useAuth();
+  const { canAdminWrite } = useAuth();
   const detail = useApi(
     () => api.get<AdminProviderDetail>(`/admin/providers/${providerId}`),
     [providerId],
@@ -327,9 +327,11 @@ function ProviderReview({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Every state-changing admin route is gated on requireMfa. Knowing that up
-  // front turns a 403 after typing a reason into a message before starting.
-  const mfaReady = sessionAal === 'mfa';
+  // Whether the server would accept a write from this session at all. Knowing
+  // it up front turns a 403 after typing a reason into a message before
+  // starting — and a deployment that does not require two-factor says so
+  // rather than leaving the panel inert.
+  const mfaReady = canAdminWrite;
 
   const reasonTooShort =
     Boolean(pending?.requiresReason) && reason.trim().length < MIN_REASON_LENGTH;

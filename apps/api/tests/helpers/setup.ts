@@ -10,6 +10,15 @@ process.env.BILLING_WEBHOOK_SECRET = 'test-billing-webhook-secret-value';
 process.env.WHATSAPP_APP_SECRET = 'test-whatsapp-app-secret';
 process.env.WHATSAPP_VERIFY_TOKEN = 'test-verify-token';
 process.env.STORAGE_DIR = '.data/test-storage';
+/**
+ * The suite tests the production posture, not the developer's .env.
+ *
+ * ADMIN_MFA_REQUIRED can be turned off locally so the demo admin can use the
+ * panel without enrolling a second factor, and that file is loaded here too —
+ * so without this line a local convenience silently disabled a security
+ * control across the whole suite. The gate's own tests flip it per case.
+ */
+process.env.ADMIN_MFA_REQUIRED = 'true';
 
 let app: Express | null = null;
 

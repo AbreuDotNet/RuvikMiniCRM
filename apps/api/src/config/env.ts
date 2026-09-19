@@ -102,6 +102,16 @@ const schema = z.object({
    */
   WORKER_HEARTBEAT_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(60_000),
 
+  /**
+   * Whether the admin routes that change state demand a two-factor session.
+   *
+   * True everywhere by default, and the boot below refuses to start if
+   * anything tries to set it false in production. It exists so a local or demo
+   * deployment can exercise the admin panel without enrolling a second factor;
+   * it is not a setting, it is a development affordance with a guard rail.
+   */
+  ADMIN_MFA_REQUIRED: booleanish.default(true),
+
   RATE_LIMIT_ENABLED: booleanish.default(true),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   TRUST_PROXY: z.coerce.number().int().default(1),
@@ -125,6 +135,19 @@ function requireSecret(name: string, value: string | undefined, bytes = 32): str
     process.exit(1);
   }
   return crypto.randomBytes(bytes).toString('hex');
+}
+
+// Loud rather than silently corrected: a deployment that believes it turned
+// this off should be told it did not, at boot, instead of discovering months
+// later that the guard was never on — or that it was.
+if (isProd && raw.ADMIN_MFA_REQUIRED === false) {
+  // eslint-disable-next-line no-console
+  console.error(
+    'FATAL: ADMIN_MFA_REQUIRED=false is refused in production. Two-factor gates the '
+    + 'routes that suspend, block and verify accounts; a stolen admin password must '
+    + 'not be enough to use them.',
+  );
+  process.exit(1);
 }
 
 export const env = {

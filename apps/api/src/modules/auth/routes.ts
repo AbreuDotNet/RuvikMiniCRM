@@ -8,6 +8,7 @@ import { limiters, clientIp } from '../../middleware/rateLimit.js';
 import { rotateRefreshToken, revokeByToken, signAccessToken } from '../../lib/tokens.js';
 import { getDb } from '../../db/index.js';
 import { unauthorized } from '../../lib/errors.js';
+import { env } from '../../config/env.js';
 
 export const authRouter = Router();
 
@@ -198,6 +199,10 @@ authRouter.get(
       // to explain up front that a state-changing action needs two-factor,
       // rather than letting someone write a reason and then hit a 403.
       sessionAal: req.auth!.aal,
+      // Whether this deployment actually enforces that. The client must not
+      // assume: a local deployment can turn it off, and a panel that stayed
+      // disabled anyway would be lying in the other direction.
+      adminMfaRequired: env.ADMIN_MFA_REQUIRED,
     });
   }),
 );

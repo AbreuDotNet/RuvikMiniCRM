@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, type Role } from '../lib/tokens.js';
 import { getDb } from '../db/index.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
+import { env } from '../config/env.js';
+import { logger } from '../lib/logger.js';
 
 export interface AuthContext {
   userId: string;
@@ -90,12 +92,27 @@ export function requireRole(...roles: Role[]) {
 }
 
 /** Admin actions that change money, permissions or account state need MFA. */
+/**
+ * Gates the admin actions that suspend, block, verify and moderate.
+ *
+ * `ADMIN_MFA_REQUIRED=false` lets a local or demo deployment use the panel
+ * without enrolling a second factor. Production cannot set it: `config/env.ts`
+ * refuses to boot. Every bypass is logged, because an auth bypass that leaves
+ * no trace is how one ends up somewhere it was never meant to run.
+ */
 export function requireMfa(req: Request, _res: Response, next: NextFunction) {
   if (!req.auth) return next(unauthorized());
-  if (req.auth.aal !== 'mfa') {
-    return next(forbidden('This action requires two-factor authentication.'));
+  if (req.auth.aal === 'mfa') return next();
+
+  if (!env.ADMIN_MFA_REQUIRED) {
+    logger.warn(
+      { userId: req.auth.userId, path: req.originalUrl },
+      'two-factor requirement bypassed: ADMIN_MFA_REQUIRED is false',
+    );
+    return next();
   }
-  next();
+
+  return next(forbidden('This action requires two-factor authentication.'));
 }
 
 /**

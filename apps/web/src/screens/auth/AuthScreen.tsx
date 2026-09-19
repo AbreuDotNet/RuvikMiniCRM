@@ -25,7 +25,7 @@ export function AuthScreen() {
     <div className="auth-screen">
       <div className="auth-brand">
         <div className="auth-brand__mark">
-          <Icon name="wrench" size={32} />
+          <img src="/icons/icon.svg" alt="" width="68" height="68" />
         </div>
         <div className="auth-brand__name">Ruvik</div>
         <div className="auth-brand__tag">Your local service marketplace</div>
