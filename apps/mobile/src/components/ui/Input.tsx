@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Pressable, TextInput, View,
+  Pressable, ScrollView, TextInput, View,
   type TextInputProps, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -195,7 +195,43 @@ export function Segmented<T extends string | undefined>({
   );
 }
 
-/** A scrollable row of filter chips, for when there are more than three choices. */
+/**
+ * The scrolling row that holds filter chips.
+ *
+ * Two things here are load-bearing, and both were bugs first.
+ *
+ * `flexGrow: 0` stops the scroller claiming whatever vertical space is left
+ * over. Without it, picking a filter that returned fewer rows made the list
+ * below shrink, the scroller expanded into the gap, and the chips — laid out
+ * in a row that stretches by default — grew into tall pills. The layout broke
+ * only on the filters with few results, which is exactly the case nobody
+ * tries first.
+ *
+ * `alignItems: 'center'` is the second half of that: it keeps each chip at
+ * its own height rather than stretching to the tallest thing in the row.
+ */
+export function FilterBar({ children }: { children: React.ReactNode }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ flexGrow: 0, flexShrink: 0 }}
+      contentContainerStyle={{
+        alignItems: 'center',
+        gap: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.md,
+        // Deliberately roomier below than above: the chips are a control and
+        // the cards are content, and without the gap they read as one block.
+        paddingBottom: spacing.lg,
+      }}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+/** One filter chip. Belongs inside a `FilterBar`. */
 export function Chip({
   label,
   selected,

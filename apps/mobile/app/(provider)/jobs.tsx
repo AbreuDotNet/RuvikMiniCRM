@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, View } from 'react-native';
+import { ActivityIndicator, FlatList, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { PageHeader } from '../../src/components/PageHeader';
 import {
-  Badge, Button, Card, Chip, EmptyState, ErrorState, Input, Screen,
+  Badge, Button, Card, Chip, EmptyState, ErrorState, FilterBar, Input, Screen,
   SkeletonList, Stack, Text,
 } from '../../src/components/ui';
 import { useJobs } from '../../src/features/crm/hooks';
@@ -51,15 +51,7 @@ export default function JobsScreen() {
         />
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{
-          gap: spacing.sm,
-          paddingHorizontal: spacing.lg,
-          paddingVertical: spacing.md,
-        }}
-      >
+      <FilterBar>
         {JOB_FILTERS.map((filter) => (
           <Chip
             key={filter.label}
@@ -68,7 +60,7 @@ export default function JobsScreen() {
             onPress={() => setStatus(filter.value)}
           />
         ))}
-      </ScrollView>
+      </FilterBar>
 
       {jobs.isPending ? (
         <View style={{ paddingHorizontal: spacing.lg }}>

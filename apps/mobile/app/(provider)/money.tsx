@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, View } from 'react-native';
+import { ActivityIndicator, FlatList, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { PageHeader } from '../../src/components/PageHeader';
 import {
-  Badge, Button, Card, Chip, EmptyState, ErrorState, Screen, Segmented,
+  Badge, Button, Card, Chip, EmptyState, ErrorState, FilterBar, Screen, Segmented,
   SkeletonList, Stack, StatTile, Text,
 } from '../../src/components/ui';
 import { useInvoices } from '../../src/features/invoices/hooks';
@@ -89,13 +89,7 @@ function InvoicesTab({ initialStatus }: { initialStatus?: string }) {
         </View>
       ) : null}
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{
-          gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-        }}
-      >
+      <FilterBar>
         {INVOICE_FILTERS.map((filter) => (
           <Chip
             key={filter.label}
@@ -104,7 +98,7 @@ function InvoicesTab({ initialStatus }: { initialStatus?: string }) {
             onPress={() => setStatus(filter.value)}
           />
         ))}
-      </ScrollView>
+      </FilterBar>
 
       {invoices.isPending ? (
         <View style={{ paddingHorizontal: spacing.lg }}>
@@ -193,13 +187,7 @@ function QuotesTab() {
 
   return (
     <>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{
-          gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-        }}
-      >
+      <FilterBar>
         {QUOTE_FILTERS.map((filter) => (
           <Chip
             key={filter.label}
@@ -208,7 +196,7 @@ function QuotesTab() {
             onPress={() => setStatus(filter.value)}
           />
         ))}
-      </ScrollView>
+      </FilterBar>
 
       {quotes.isPending ? (
         <View style={{ paddingHorizontal: spacing.lg }}>

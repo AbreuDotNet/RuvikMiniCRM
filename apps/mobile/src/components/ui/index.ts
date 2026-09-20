@@ -8,7 +8,7 @@ export {
   Card, Divider, Badge, Banner, Avatar, ListRow, StatTile, SectionHeader, DetailRow,
 } from './Surface';
 
-export { Field, Input, Segmented, Chip, Switch } from './Input';
+export { Field, Input, Segmented, FilterBar, Chip, Switch } from './Input';
 export type { InputProps, SegmentOption } from './Input';
 
 export { Screen, ScreenScroll, Stack, Row, GUTTER } from './Screen';

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, View } from 'react-native';
+import { ActivityIndicator, FlatList, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { PageHeader } from '../../src/components/PageHeader';
 import {
-  Badge, Button, Card, Chip, EmptyState, ErrorState, Input, Screen, Segmented,
+  Badge, Button, Card, Chip, EmptyState, ErrorState, FilterBar, Input, Screen, Segmented,
   Sheet, SkeletonList, Stack, Text,
 } from '../../src/components/ui';
 import { useCategories, useServiceSearch } from '../../src/features/discovery/hooks';
@@ -84,15 +84,7 @@ export default function SearchScreen() {
       </View>
 
       {categories.data?.length ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            gap: spacing.sm,
-            paddingHorizontal: spacing.lg,
-            paddingVertical: spacing.md,
-          }}
-        >
+        <FilterBar>
           <Chip label="All" selected={!category} onPress={() => setCategory(undefined)} />
           {categories.data.map((c) => (
             <Chip
@@ -102,7 +94,7 @@ export default function SearchScreen() {
               onPress={() => setCategory(category === c.slug ? undefined : c.slug)}
             />
           ))}
-        </ScrollView>
+        </FilterBar>
       ) : null}
 
       {search.isPending ? (

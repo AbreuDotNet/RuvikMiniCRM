@@ -107,7 +107,16 @@ export function EmptyState({
         {message}
       </Text>
       {action ? (
-        <Button label={action.label} onPress={action.onPress} fullWidth={false} variant="secondary" />
+        <Button
+          label={action.label}
+          onPress={action.onPress}
+          fullWidth={false}
+          variant="secondary"
+          // The block is centred, so the button has to be told to centre too:
+          // `fullWidth={false}` aligns to the start, which left it hugging the
+          // left edge under centred text.
+          style={{ alignSelf: "center" }}
+        />
       ) : null}
     </View>
   );
@@ -148,7 +157,14 @@ export function ErrorState({
         </Text>
       ) : null}
       {onRetry && retryable ? (
-        <Button label="Try again" onPress={onRetry} fullWidth={false} variant="secondary" icon="refresh" />
+        <Button
+          label="Try again"
+          onPress={onRetry}
+          fullWidth={false}
+          variant="secondary"
+          icon="refresh"
+          style={{ alignSelf: "center" }}
+        />
       ) : null}
     </View>
   );
