@@ -1,0 +1,19 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    // `noUncheckedIndexedAccess` is deliberately off. `src/utils/money.ts` is a
+    // byte-identical mirror of the API's `lib/money.ts` — the parity test in
+    // `apps/api/tests/unit/moneyParity.test.ts` runs all three copies over the
+    // same cases — and the flag would force this copy to drift from the
+    // original it exists to match.
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules", "dist", ".expo"]
+}
