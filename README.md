@@ -20,6 +20,11 @@ npm run dev      # API :4000 · web :5173
 
 Open **http://localhost:5173** and use a demo chip on the sign-in screen.
 
+For the native app, see [apps/mobile/README.md](apps/mobile/README.md).
+It is installed separately — `npm --prefix apps/mobile install`, then
+`npm run dev:mobile` — because it is deliberately outside the npm workspaces:
+hoisting React Native next to the web app’s React 18 breaks both.
+
 | Role | Email | Password |
 |---|---|---|
 | Customer | `ana@ruvik.demo` | `RuvikDemo2026!` |
@@ -41,6 +46,9 @@ The SQL, schema and migrations are identical to production; set
 | `npm test` | 141 tests |
 | `npm run test:security` | Security suites only |
 | `npm run typecheck` | Both workspaces |
+| `npm run dev:mobile` | Expo dev server for the native app |
+| `npm run test:mobile` | Mobile unit tests |
+| `npm run typecheck:mobile` | Mobile typecheck |
 | `npm run build` | Production build |
 | `npm run worker` | Workers as a standalone process |
 | `node loadtest/run.mjs` | Load test with SLO assertions |
@@ -107,6 +115,11 @@ apps/api/            Express API, workers, migrations, seed
   src/workers        PDF, WhatsApp, email, billing, scanning
   tests              unit · integration · e2e · security
 apps/web/            React app (customer, provider, admin)
+apps/mobile/         Expo app for iOS and Android (customer, provider)
+  app/               Expo Router routes, grouped by role
+  src/services       HTTP client, keychain session, file transfer, push
+  src/features       One folder per domain: hooks plus its own screens
+  src/components/ui  The mobile design system
 docs/                architecture · data-model · api · rbac · threat-model
                      slo · testing · deployment · security-checklist
 loadtest/            Node harness + k6 profiles

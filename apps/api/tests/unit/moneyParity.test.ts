@@ -6,6 +6,10 @@ import { computeTotals as apiTotals } from '../../src/lib/money.js';
 // shifted the tax by a cent between what the provider approved and what was
 // invoiced.
 import { computeTotals as webTotals } from '../../../web/src/lib/money.js';
+// The mobile mirror, for the quote builder preview in `apps/mobile`. A third
+// copy is a third chance to drift, so it is swept here too rather than
+// trusted to stay in step.
+import { computeTotals as mobileTotals } from '../../../mobile/src/utils/money.js';
 
 type Case = { lines: Array<{ q: number; p: number; bp: number; t?: 'taxable' | 'exempt' | 'not_subject' }>; discount: number };
 
@@ -28,7 +32,7 @@ function makeRng(seed: number) {
   };
 }
 
-describe('money: API and web preview agree', () => {
+describe('money: API, web preview and mobile preview agree', () => {
   it('matches across a wide sweep of documents', () => {
     const rng = makeRng(20260830);
     // Real US combined rates, none of them a flat national figure.
@@ -51,10 +55,18 @@ describe('money: API and web preview agree', () => {
       const w = webTotals(lines.map((l) => ({
         quantity: l.q, unitPriceCents: l.p, taxRateBp: l.bp, taxTreatment: l.t,
       })), discount);
+      const m = mobileTotals(lines.map((l) => ({
+        quantity: l.q, unitPriceCents: l.p, taxRateBp: l.bp, taxTreatment: l.t,
+      })), discount);
 
-      if (a.totalCents !== w.totalCents || a.taxCents !== w.taxCents
-        || a.subtotalCents !== w.subtotalCents || a.discountCents !== w.discountCents) {
-        mismatches.push(JSON.stringify({ lines, discount, api: a.totalCents, web: w.totalCents }));
+      const disagrees = (o: { totalCents: number; taxCents: number; subtotalCents: number; discountCents: number }) =>
+        a.totalCents !== o.totalCents || a.taxCents !== o.taxCents
+        || a.subtotalCents !== o.subtotalCents || a.discountCents !== o.discountCents;
+
+      if (disagrees(w) || disagrees(m)) {
+        mismatches.push(JSON.stringify({
+          lines, discount, api: a.totalCents, web: w.totalCents, mobile: m.totalCents,
+        }));
       }
     }
 
