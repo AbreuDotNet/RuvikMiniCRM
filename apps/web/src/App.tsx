@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { AuthProvider, useAuth, type Role } from './state/auth';
 import { ToastProvider, ThemeProvider, useToast } from './state/ui';
-import { Spinner } from './components/ui';
 import { registerServiceWorker } from './lib/serviceWorker';
 
 import { AuthScreen } from './screens/auth/AuthScreen';
@@ -43,16 +42,19 @@ import './styles/receipt.css';
 
 function FullScreenLoader() {
   return (
-    <div
-      style={{
-        minHeight: '100dvh', display: 'grid', placeItems: 'center',
-        background: 'var(--bg)', color: 'var(--brand)',
-      }}
-      role="status"
-      aria-live="polite"
-    >
-      <span className="sr-only">Loading Ruvik…</span>
-      <Spinner size={32} />
+    <div className="app-splash" role="status" aria-live="polite">
+      <div className="app-splash__orbit app-splash__orbit--outer" aria-hidden="true" />
+      <div className="app-splash__orbit app-splash__orbit--inner" aria-hidden="true" />
+
+      <div className="app-splash__content">
+        <div className="app-splash__mark" aria-hidden="true">
+          <img src="/icons/icon.svg" alt="" width="88" height="88" />
+        </div>
+        <div className="app-splash__wordmark">Ruvik</div>
+        <p className="app-splash__tagline">Your local service marketplace</p>
+        <div className="app-splash__progress" aria-hidden="true"><span /></div>
+        <span className="sr-only">Loading Ruvik…</span>
+      </div>
     </div>
   );
 }

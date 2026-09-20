@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920" role="img" aria-labelledby="title desc">
+  <title id="title">Ruvik splash screen</title>
+  <desc id="desc">A modern blue Ruvik startup screen with the Ruvik logo and a subtle loading indicator.</desc>
+  <rect width="1080" height="1920" fill="#3C5A7D"/>
+  <circle cx="1000" cy="-30" r="420" fill="none" stroke="#FFFFFF" stroke-opacity=".12" stroke-width="2"/>
+  <circle cx="-60" cy="1820" r="430" fill="none" stroke="#FFFFFF" stroke-opacity=".04" stroke-width="48"/>
+  <circle cx="540" cy="886" r="470" fill="none" stroke="#FFFFFF" stroke-opacity=".13" stroke-width="2"/>
+  <ellipse cx="540" cy="886" rx="305" ry="220" fill="none" stroke="#D57E5F" stroke-opacity=".8" stroke-width="2" transform="rotate(-18 540 886)"/>
+  <rect x="434" y="780" width="212" height="212" rx="62" fill="#FFFFFF" fill-opacity=".10" stroke="#FFFFFF" stroke-opacity=".22" stroke-width="2"/>
+  <rect x="450" y="796" width="180" height="180" rx="51" fill="#3C5A7D"/>
+  <rect x="490" y="833" width="28" height="106" rx="14" fill="#FFFFFF"/>
+  <path d="M515 836h54c34 0 58 23 58 51s-24 51-58 51h-54v-25h53c18 0 29-10 29-26s-11-26-29-26h-53z" fill="#FFFFFF"/>
+  <path d="m549 929 66 66" fill="none" stroke="#C4623F" stroke-width="28" stroke-linecap="round"/>
+  <text x="540" y="1086" fill="#FFFFFF" font-family="Manrope, Inter, Avenir Next, Segoe UI, sans-serif" font-size="72" font-weight="700" letter-spacing="-4" text-anchor="middle">Ruvik</text>
+  <text x="540" y="1135" fill="#FFFFFF" fill-opacity=".78" font-family="Manrope, Inter, Avenir Next, Segoe UI, sans-serif" font-size="26" text-anchor="middle">Your local service marketplace</text>
+  <rect x="472" y="1260" width="136" height="5" rx="2.5" fill="#FFFFFF" fill-opacity=".24"/>
+  <rect x="472" y="1260" width="54" height="5" rx="2.5" fill="#D57E5F"/>
+</svg>
