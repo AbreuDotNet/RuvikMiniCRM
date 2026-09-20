@@ -24,6 +24,20 @@ npm start
 Press `i` for the iOS simulator, `a` for the Android emulator, or scan the QR
 code with Expo Go on a real phone.
 
+> **Do not press `w`.** This app has no web target — `react-native-web` is not
+> installed, so the web bundle fails with a MIME-type error. The web app is a
+> separate thing that already exists at `apps/web`, on port 5173. Adding a web
+> build here would also quietly break the session model: `expo-secure-store`
+> ships an empty stub on web, so the refresh token would simply never persist.
+
+> **Push does not work in Expo Go on Android.** Expo Go dropped remote
+> notifications in SDK 53, and `expo-notifications` throws *as it is imported*
+> rather than when it is called. `src/services/push.ts` therefore loads it
+> lazily behind a `require` in a try/catch — a static import took the whole app
+> down on launch with `Cannot read property 'ErrorBoundary' of undefined`,
+> which names nothing to do with notifications. Everything else works in Expo
+> Go; use a development build when you need to exercise push itself.
+
 From the repo root you can also use `npm run dev:mobile`, `npm run
 typecheck:mobile` and `npm run test:mobile`.
 

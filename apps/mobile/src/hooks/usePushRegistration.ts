@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import { router } from 'expo-router';
-import * as Notifications from 'expo-notifications';
 
-import { registerDeviceToken, registerForPush } from '../services/push';
+import { onNotificationTapped, registerDeviceToken, registerForPush } from '../services/push';
 import { useAuth } from '../state/auth';
 
 /**
@@ -12,6 +11,11 @@ import { useAuth } from '../state/auth';
  * Permission is requested after sign-in rather than on first launch: a prompt
  * that arrives before someone knows what the app is gets denied, and on iOS
  * that denial is close to permanent.
+ *
+ * Every call into the notifications module is guarded inside
+ * `services/push.ts`, because in Expo Go it throws rather than degrading —
+ * and this hook runs from the root layout, where a throw takes down the
+ * whole app.
  *
  * The token is obtained but not yet sent anywhere — see `services/push.ts`.
  */
@@ -31,14 +35,10 @@ export function usePushRegistration(): void {
     return () => { cancelled = true; };
   }, [status]);
 
-  useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as Record<string, unknown>;
-      const target = routeFor(data);
-      if (target) router.push(target as never);
-    });
-    return () => subscription.remove();
-  }, []);
+  useEffect(() => onNotificationTapped((data) => {
+    const target = routeFor(data);
+    if (target) router.push(target as never);
+  }), []);
 }
 
 function routeFor(data: Record<string, unknown>): string | null {
