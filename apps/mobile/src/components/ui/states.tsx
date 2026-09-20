@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Animated, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  ActivityIndicator, Animated, Easing, View, type StyleProp, type ViewStyle,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../../theme/ThemeProvider';
@@ -8,6 +10,61 @@ import { ApiError } from '../../services/apiClient';
 import { Button } from './Button';
 import { Card } from './Surface';
 import { Text } from './Text';
+
+/**
+ * Fades and lifts its children in on mount.
+ *
+ * Used to stagger a screen's blocks by a few dozen milliseconds each, so the
+ * page assembles rather than appearing all at once. Kept small deliberately:
+ * a 12pt rise over 380ms reads as the screen settling, while anything longer
+ * is an animation the user waits through on every visit.
+ *
+ * Runs on the native driver, so it costs nothing on the JS thread.
+ */
+export function Reveal({
+  children,
+  delay = 0,
+  distance = 12,
+  style,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  distance?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const [progress] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    const animation = Animated.timing(progress, {
+      toValue: 1,
+      duration: 380,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [progress, delay]);
+
+  return (
+    <Animated.View
+      style={[
+        {
+          opacity: progress,
+          transform: [{
+            translateY: progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [distance, 0],
+            }),
+          }],
+        },
+        style,
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 
 /** A pulsing placeholder the same shape as the thing that is loading. */
 export function Skeleton({

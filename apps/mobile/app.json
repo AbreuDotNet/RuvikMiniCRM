@@ -9,9 +9,9 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash-mark.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0B1220"
+      "backgroundColor": "#3C5A7D"
     },
     "ios": {
       "supportsTablet": true,
@@ -24,7 +24,7 @@
       "package": "com.ruvik.app",
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
-        "backgroundColor": "#0B1220",
+        "backgroundColor": "#3C5A7D",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -42,9 +42,14 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B1220",
-          "image": "./assets/splash-icon.png",
-          "imageWidth": 180
+          "backgroundColor": "#3C5A7D",
+          "image": "./assets/splash-mark.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#3C5A7D",
+            "image": "./assets/splash-mark.png"
+          }
         }
       ],
       [
@@ -56,7 +61,7 @@
       [
         "expo-notifications",
         {
-          "color": "#2563EB"
+          "color": "#D57E5F"
         }
       ]
     ],

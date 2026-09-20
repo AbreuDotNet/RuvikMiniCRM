@@ -1,11 +1,8 @@
 import { useState } from 'react';
-import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  Button, Input, ScreenScroll, Stack, Text, useFeedback,
-} from '../../src/components/ui';
+import { AuthScaffold } from '../../src/components/AuthScaffold';
+import { Button, Input, Stack, Text, useFeedback } from '../../src/components/ui';
 import { useAuth } from '../../src/state/auth';
 import { errorMessage } from '../../src/services/api';
 import { spacing } from '../../src/theme/tokens';
@@ -18,7 +15,6 @@ import { spacing } from '../../src/theme/tokens';
  * rather than stored, so it dies when this screen does.
  */
 export default function MfaScreen() {
-  const insets = useSafeAreaInsets();
   const { mfaToken } = useLocalSearchParams<{ mfaToken?: string }>();
   const { verifyMfa } = useAuth();
   const { notify } = useFeedback();
@@ -45,44 +41,41 @@ export default function MfaScreen() {
   };
 
   return (
-    <ScreenScroll keyboardAware contentStyle={{ paddingTop: insets.top + spacing.xxl }}>
-      <Stack gap={spacing.xs}>
-        <Text variant="title" accessibilityRole="header">Two-factor code</Text>
-        <Text variant="body" tone="muted">
-          Open your authenticator app and enter the six-digit code. A recovery code works too.
+    <AuthScaffold
+      title="Two-factor code"
+      subtitle="Open your authenticator app and enter the six-digit code."
+      onBack={() => router.replace('/(auth)/sign-in')}
+    >
+      <Stack gap={spacing.md}>
+        <Input
+          label="Code"
+          placeholder="123456"
+          keyboardType="number-pad"
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
+          leftIcon="keypad-outline"
+          maxLength={12}
+          autoFocus
+          value={code}
+          onChangeText={(next) => { setCode(next); setError(null); }}
+          error={error ?? undefined}
+          onSubmitEditing={() => void submit()}
+          returnKeyType="go"
+        />
+
+        <Button
+          label="Verify"
+          icon="shield-checkmark-outline"
+          loading={busy}
+          disabled={code.trim().length < 6}
+          haptic
+          onPress={() => void submit()}
+        />
+
+        <Text variant="micro" tone="muted" align="center">
+          Lost your phone? A recovery code works here too.
         </Text>
       </Stack>
-
-      <Input
-        label="Code"
-        placeholder="123456"
-        keyboardType="number-pad"
-        autoComplete="one-time-code"
-        textContentType="oneTimeCode"
-        maxLength={12}
-        autoFocus
-        value={code}
-        onChangeText={(next) => { setCode(next); setError(null); }}
-        error={error ?? undefined}
-        onSubmitEditing={() => void submit()}
-        returnKeyType="go"
-      />
-
-      <Button
-        label="Verify"
-        loading={busy}
-        disabled={code.trim().length < 6}
-        onPress={() => void submit()}
-      />
-
-      <View style={{ alignItems: 'center' }}>
-        <Button
-          label="Back to sign in"
-          variant="ghost"
-          fullWidth={false}
-          onPress={() => router.replace('/(auth)/sign-in')}
-        />
-      </View>
-    </ScreenScroll>
+    </AuthScaffold>
   );
 }

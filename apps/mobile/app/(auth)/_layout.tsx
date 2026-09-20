@@ -2,11 +2,10 @@ import { Redirect, Stack } from 'expo-router';
 
 import { FullScreenLoader, HOME_FOR_ROLE } from '../../src/components/Guard';
 import { useAuth } from '../../src/state/auth';
-import { useTheme } from '../../src/theme/ThemeProvider';
+import { brand } from '../../src/theme/tokens';
 
 export default function AuthLayout() {
   const { status, user } = useAuth();
-  const theme = useTheme();
 
   if (status === 'loading') return <FullScreenLoader />;
   // Someone already signed in has no business on the sign-in screen; the back
@@ -19,8 +18,12 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: theme.colors.canvas },
+        // Navy, not the theme canvas: these screens have a navy band at the
+        // top, and a light background behind the transition flashes white
+        // down the edge as the new screen slides in.
+        contentStyle: { backgroundColor: brand.navy },
         animation: 'slide_from_right',
+        animationDuration: 260,
       }}
     />
   );

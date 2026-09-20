@@ -1,8 +1,7 @@
-import { View , ActivityIndicator } from 'react-native';
 import { Redirect } from 'expo-router';
 
 import { useAuth } from '../state/auth';
-import { useTheme } from '../theme/ThemeProvider';
+import { LaunchScreen } from './LaunchScreen';
 import type { Role } from '../types/api';
 
 /** Where each role lands after signing in. */
@@ -12,20 +11,15 @@ export const HOME_FOR_ROLE: Record<Role, string> = {
   admin: '/(admin)',
 };
 
+/**
+ * What is shown while the session is being restored.
+ *
+ * The branded launch screen rather than a bare spinner: this is the same
+ * moment the OS splash was covering, so continuing the artwork reads as the
+ * app still starting rather than as a new, emptier screen.
+ */
 export function FullScreenLoader() {
-  const theme = useTheme();
-  return (
-    <View
-      style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.canvas,
-      }}
-    >
-      <ActivityIndicator color={theme.colors.primary} />
-    </View>
-  );
+  return <LaunchScreen />;
 }
 
 /**

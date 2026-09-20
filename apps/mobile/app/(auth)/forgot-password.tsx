@@ -1,17 +1,15 @@
 import { useState } from 'react';
-import { View } from 'react-native';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AuthScaffold } from '../../src/components/AuthScaffold';
 import {
-  Banner, Button, Input, ScreenScroll, Stack, Text, useFeedback,
+  Banner, Button, Input, Stack, useFeedback,
 } from '../../src/components/ui';
 import { useRequestPasswordReset } from '../../src/features/account/hooks';
 import { errorMessage } from '../../src/services/api';
 import { spacing } from '../../src/theme/tokens';
 
 export default function ForgotPassword() {
-  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const { notify } = useFeedback();
@@ -30,22 +28,26 @@ export default function ForgotPassword() {
   };
 
   return (
-    <ScreenScroll keyboardAware contentStyle={{ paddingTop: insets.top + spacing.xxl }}>
-      <Stack gap={spacing.xs}>
-        <Text variant="title" accessibilityRole="header">Reset your password</Text>
-        <Text variant="body" tone="muted">
-          We will email you a link. It expires shortly, so use it soon.
-        </Text>
-      </Stack>
-
+    <AuthScaffold
+      title={sent ? 'Check your email' : 'Reset your password'}
+      subtitle={
+        sent
+          ? undefined
+          : 'We will email you a link. It expires shortly, so use it soon.'
+      }
+      onBack={() => router.back()}
+    >
       {sent ? (
         <Stack gap={spacing.lg}>
           <Banner
             tone="success"
-            title="Check your email"
             message={`If an account exists for ${email.trim()}, a reset link is on its way. The link opens in your browser.`}
           />
-          <Button label="Back to sign in" onPress={() => router.replace('/(auth)/sign-in')} />
+          <Button
+            label="Back to sign in"
+            icon="arrow-back"
+            onPress={() => router.replace('/(auth)/sign-in')}
+          />
         </Stack>
       ) : (
         <Stack gap={spacing.md}>
@@ -60,23 +62,17 @@ export default function ForgotPassword() {
             onChangeText={setEmail}
             onSubmitEditing={() => void submit()}
             returnKeyType="send"
+            autoFocus
           />
           <Button
             label="Send reset link"
+            icon="paper-plane-outline"
             loading={request.isPending}
             disabled={!email.includes('@')}
             onPress={() => void submit()}
           />
-          <View style={{ alignItems: 'center' }}>
-            <Button
-              label="Back"
-              variant="ghost"
-              fullWidth={false}
-              onPress={() => router.back()}
-            />
-          </View>
         </Stack>
       )}
-    </ScreenScroll>
+    </AuthScaffold>
   );
 }

@@ -149,6 +149,27 @@ retries — that is the entire point. The payment sheet mounts fresh each time
 it opens so its key is per-attempt, and React Query is configured to **never
 retry a mutation automatically**.
 
+### Branding and the launch screen
+
+`assets/splash-mark.png` is the mark cropped from the launch artwork, and
+`brand` in `src/theme/tokens.ts` carries the palette sampled from that same
+file rather than eyeballed — the ring in the artwork is exactly the accent at
+80% over the navy.
+
+There are two launch screens, and they are not the same thing:
+
+- The **native splash** (`app.json`) is the OS one. Android 12 removed
+  full-bleed splash images, so it can only be a centred mark on a flat
+  colour. **Expo Go shows its own splash, not this one** — it is only visible
+  in a development or production build.
+- **`LaunchScreen`** is the in-app one, shown while the session is restored.
+  It rebuilds the rings, wordmark, tagline and a moving progress bar in plain
+  views: sharp at every density, correct on any aspect ratio, and the bar can
+  actually move. Both share the navy, so the handoff is invisible.
+
+The auth screens continue the same composition — navy band, same mark, same
+rings at a whisper — so signing in reads as the next step of starting the app
+rather than a different product.
 ### Accessibility
 
 Touch targets are 44pt minimum, `allowFontScaling` stays on everywhere (capped

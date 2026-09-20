@@ -1,20 +1,18 @@
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Ionicons } from '@expo/vector-icons';
 import { z } from 'zod';
 
-import {
-  Button, Input, ScreenScroll, Stack, Text, useFeedback,
-} from '../../src/components/ui';
+import { AuthScaffold, StepIndicator } from '../../src/components/AuthScaffold';
+import { Button, Input, Reveal, Stack, Text, useFeedback } from '../../src/components/ui';
 import { useAuth } from '../../src/state/auth';
-import { ApiError } from '../../src/services/apiClient';
 import { errorMessage } from '../../src/services/api';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { radius, spacing } from '../../src/theme/tokens';
+import { applyFieldErrors } from '../../src/utils/forms';
 
 /** Mirrors the server's rules so the failure arrives before the round trip. */
 const schema = z.object({
@@ -33,11 +31,12 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+const STEPS = 3;
+
 export default function SignUp() {
-  const insets = useSafeAreaInsets();
   const { signup } = useAuth();
   const { notify } = useFeedback();
-  const [step, setStep] = useState<0 | 1>(0);
+  const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
   const { control, handleSubmit, setError, trigger } = useForm<FormValues>({
@@ -63,145 +62,176 @@ export default function SignUp() {
         city: values.city?.trim() || undefined,
       });
     } catch (err) {
-      if (err instanceof ApiError) {
-        const ours = new Set<keyof FormValues>([
-          'fullName', 'email', 'password', 'businessName', 'city',
-        ]);
-        const fields = err.fieldErrors();
-        let handled = false;
-        for (const [field, message] of Object.entries(fields)) {
-          if (ours.has(field as keyof FormValues)) {
-            setError(field as keyof FormValues, { message });
-            handled = true;
-          }
-        }
-        // An email that is already registered comes back as a field error on
-        // `email`, so step one is where it needs to be seen.
-        if (handled) setStep(0);
-        else notify(err.message, 'error');
-      } else {
-        notify(errorMessage(err), 'error');
-      }
+      const placed = applyFieldErrors(err, setError, [
+        'fullName', 'email', 'password', 'businessName', 'city',
+      ]);
+      // An email that is already registered comes back as a field error on
+      // `email`, which lives on step two — so go back to where it can be seen.
+      if (placed) setStep(1);
+      else notify(errorMessage(err), 'error');
     } finally {
       setSubmitting(false);
     }
   });
 
-  const goNext = async () => {
-    const valid = await trigger(['role', 'fullName', 'email', 'password']);
-    if (valid) setStep(1);
+  const next = async () => {
+    const fields: Record<number, (keyof FormValues)[]> = {
+      0: ['role'],
+      1: ['fullName', 'email', 'password'],
+    };
+    const valid = await trigger(fields[step] ?? []);
+    if (valid) setStep((current) => Math.min(current + 1, STEPS - 1));
   };
 
-  return (
-    <ScreenScroll keyboardAware contentStyle={{ paddingTop: insets.top + spacing.xl }}>
-      <Stack gap={spacing.xs}>
-        <Text variant="micro" tone="muted" uppercase>Step {step + 1} of 2</Text>
-        <ProgressBar step={step} />
-        <Text variant="title" accessibilityRole="header" style={{ marginTop: spacing.md }}>
-          {step === 0 ? 'Create your account' : role === 'provider' ? 'About your business' : 'Almost there'}
-        </Text>
-        <Text variant="caption" tone="muted">
-          {step === 0
-            ? 'You can change any of this later.'
-            : role === 'provider'
-              ? 'This is what customers will see when they find you.'
-              : 'Where you are helps us show you nearby professionals.'}
-        </Text>
-      </Stack>
+  const back = () => {
+    if (step === 0) router.back();
+    else setStep((current) => current - 1);
+  };
 
-      {step === 0 ? (
-        <Stack gap={spacing.md}>
+  const copy = [
+    {
+      title: 'How will you use Ruvik?',
+      subtitle: 'This decides what the app shows you. You can only pick one.',
+    },
+    {
+      title: 'Create your account',
+      subtitle: 'You can change any of this later.',
+    },
+    {
+      title: role === 'provider' ? 'About your business' : 'Where are you?',
+      subtitle: role === 'provider'
+        ? 'This is what customers see when they find you.'
+        : 'It helps us show you nearby professionals.',
+    },
+  ][step]!;
+
+  return (
+    <AuthScaffold
+      title={copy.title}
+      subtitle={copy.subtitle}
+      onBack={back}
+      eyebrow={<StepIndicator step={step} total={STEPS} />}
+      footer={
+        step === 0 ? (
+          <Button
+            label="I already have an account"
+            variant="ghost"
+            onPress={() => router.replace('/(auth)/sign-in')}
+          />
+        ) : undefined
+      }
+    >
+      {/* Keyed on the step so each one animates in as it arrives, rather than
+          the fields silently swapping under the same heading. */}
+      <Reveal key={step}>
+        {step === 0 ? (
           <Controller
             control={control}
             name="role"
             render={({ field }) => (
-              <Stack gap={spacing.sm}>
-                <Text variant="caption" tone="muted">I am</Text>
+              <Stack gap={spacing.md}>
                 <RoleCard
                   icon="search-outline"
-                  title="Looking for a professional"
-                  description="Find someone, request a quote and pay for the work."
+                  title="I am looking for a professional"
+                  description="Find someone nearby, ask for a quote, and pay for the work."
                   selected={field.value === 'customer'}
                   onPress={() => field.onChange('customer')}
                 />
                 <RoleCard
                   icon="hammer-outline"
-                  title="Offering my services"
-                  description="Manage clients, jobs, quotes and invoices in one place."
+                  title="I offer my services"
+                  description="Run clients, jobs, quotes and invoices from your phone."
                   selected={field.value === 'provider'}
                   onPress={() => field.onChange('provider')}
                 />
               </Stack>
             )}
           />
-
-          <Controller
-            control={control}
-            name="fullName"
-            render={({ field, fieldState }) => (
-              <Input
-                label="Your name"
-                placeholder="Ana Torres"
-                autoComplete="name"
-                textContentType="name"
-                value={field.value}
-                onChangeText={field.onChange}
-                onBlur={field.onBlur}
-                error={fieldState.error?.message}
-              />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="email"
-            render={({ field, fieldState }) => (
-              <Input
-                label="Email"
-                placeholder="you@example.com"
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                value={field.value}
-                onChangeText={field.onChange}
-                onBlur={field.onBlur}
-                error={fieldState.error?.message}
-              />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="password"
-            render={({ field, fieldState }) => (
-              <Input
-                label="Password"
-                placeholder="At least 12 characters"
-                hint="Long beats complicated. A short phrase you will remember is fine."
-                autoCapitalize="none"
-                autoComplete="new-password"
-                textContentType="newPassword"
-                secure
-                value={field.value}
-                onChangeText={field.onChange}
-                onBlur={field.onBlur}
-                error={fieldState.error?.message}
-              />
-            )}
-          />
-
-          <Button label="Continue" icon="arrow-forward" iconPosition="right" onPress={() => void goNext()} />
-        </Stack>
-      ) : (
-        <Stack gap={spacing.md}>
-          {role === 'provider' ? (
+        ) : step === 1 ? (
+          <Stack gap={spacing.md}>
             <Controller
               control={control}
-              name="businessName"
+              name="fullName"
               render={({ field, fieldState }) => (
                 <Input
-                  label="Business name"
-                  placeholder="Torres Drywall"
+                  label="Your name"
+                  placeholder="Ana Torres"
+                  autoComplete="name"
+                  textContentType="name"
+                  leftIcon="person-outline"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  onBlur={field.onBlur}
+                  error={fieldState.error?.message}
+                />
+              )}
+            />
+            <Controller
+              control={control}
+              name="email"
+              render={({ field, fieldState }) => (
+                <Input
+                  label="Email"
+                  placeholder="you@example.com"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  leftIcon="mail-outline"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  onBlur={field.onBlur}
+                  error={fieldState.error?.message}
+                />
+              )}
+            />
+            <Controller
+              control={control}
+              name="password"
+              render={({ field, fieldState }) => (
+                <Input
+                  label="Password"
+                  placeholder="At least 12 characters"
+                  hint="Long beats complicated. A short phrase you will remember is fine."
+                  autoCapitalize="none"
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  leftIcon="lock-closed-outline"
+                  secure
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  onBlur={field.onBlur}
+                  error={fieldState.error?.message}
+                />
+              )}
+            />
+          </Stack>
+        ) : (
+          <Stack gap={spacing.md}>
+            {role === 'provider' ? (
+              <Controller
+                control={control}
+                name="businessName"
+                render={({ field, fieldState }) => (
+                  <Input
+                    label="Business name"
+                    placeholder="Torres Drywall"
+                    leftIcon="storefront-outline"
+                    value={field.value ?? ''}
+                    onChangeText={field.onChange}
+                    onBlur={field.onBlur}
+                    error={fieldState.error?.message}
+                  />
+                )}
+              />
+            ) : null}
+            <Controller
+              control={control}
+              name="city"
+              render={({ field, fieldState }) => (
+                <Input
+                  label="City"
+                  placeholder="Austin"
+                  leftIcon="location-outline"
                   value={field.value ?? ''}
                   onChangeText={field.onChange}
                   onBlur={field.onBlur}
@@ -209,61 +239,28 @@ export default function SignUp() {
                 />
               )}
             />
-          ) : null}
+          </Stack>
+        )}
+      </Reveal>
 
-          <Controller
-            control={control}
-            name="city"
-            render={({ field, fieldState }) => (
-              <Input
-                label="City"
-                placeholder="Austin"
-                value={field.value ?? ''}
-                onChangeText={field.onChange}
-                onBlur={field.onBlur}
-                error={fieldState.error?.message}
-              />
-            )}
-          />
-
-          <Button label="Create account" loading={submitting} onPress={() => void onSubmit()} />
-          <Button label="Back" variant="ghost" disabled={submitting} onPress={() => setStep(0)} />
-        </Stack>
-      )}
-
-      <View style={{ alignItems: 'center', marginTop: spacing.lg }}>
+      {step < STEPS - 1 ? (
         <Button
-          label="I already have an account"
-          variant="ghost"
-          fullWidth={false}
-          onPress={() => router.replace('/(auth)/sign-in')}
+          label="Continue"
+          icon="arrow-forward"
+          iconPosition="right"
+          onPress={() => void next()}
         />
-      </View>
-    </ScreenScroll>
-  );
-}
-
-function ProgressBar({ step }: { step: number }) {
-  const theme = useTheme();
-  return (
-    <View
-      accessible
-      accessibilityRole="progressbar"
-      accessibilityValue={{ min: 1, max: 2, now: step + 1 }}
-      style={{ flexDirection: 'row', gap: spacing.xs }}
-    >
-      {[0, 1].map((index) => (
-        <View
-          key={index}
-          style={{
-            flex: 1,
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: index <= step ? theme.colors.primary : theme.colors.border,
-          }}
+      ) : (
+        <Button
+          label="Create account"
+          icon="checkmark"
+          iconPosition="right"
+          loading={submitting}
+          haptic
+          onPress={() => void onSubmit()}
         />
-      ))}
-    </View>
+      )}
+    </AuthScaffold>
   );
 }
 
@@ -284,23 +281,35 @@ function RoleCard({
       accessibilityLabel={title}
       accessibilityHint={description}
       onPress={onPress}
-      style={{
+      style={({ pressed }) => ({
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: spacing.md,
         padding: spacing.lg,
         borderRadius: radius.lg,
         borderWidth: selected ? 2 : 1,
         borderColor: selected ? theme.colors.primary : theme.colors.border,
         backgroundColor: selected ? theme.colors.primaryMuted : theme.colors.surface,
-      }}
+        opacity: pressed ? 0.9 : 1,
+      })}
     >
-      <Ionicons
-        name={icon}
-        size={24}
-        color={selected ? theme.colors.primary : theme.colors.textMuted}
-      />
-      <View style={{ flex: 1, gap: 2 }}>
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: radius.md,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: selected ? theme.colors.primary : theme.colors.surfaceMuted,
+        }}
+      >
+        <Ionicons
+          name={icon}
+          size={20}
+          color={selected ? theme.colors.onPrimary : theme.colors.textMuted}
+        />
+      </View>
+      <View style={{ flex: 1, gap: 3 }}>
         <Text variant="bodyStrong">{title}</Text>
         <Text variant="micro" tone="muted">{description}</Text>
       </View>
@@ -308,6 +317,7 @@ function RoleCard({
         name={selected ? 'radio-button-on' : 'radio-button-off'}
         size={20}
         color={selected ? theme.colors.primary : theme.colors.borderStrong}
+        style={{ marginTop: 2 }}
       />
     </Pressable>
   );

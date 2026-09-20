@@ -13,7 +13,7 @@ export type { InputProps, SegmentOption } from './Input';
 
 export { Screen, ScreenScroll, Stack, Row, GUTTER } from './Screen';
 
-export { Skeleton, SkeletonList, Loading, EmptyState, ErrorState } from './states';
+export { Skeleton, SkeletonList, Loading, EmptyState, ErrorState, Reveal } from './states';
 
 export { Sheet, ConfirmSheet } from './Sheet';
 

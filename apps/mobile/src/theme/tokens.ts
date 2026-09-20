@@ -120,6 +120,31 @@ export const darkPalette: Palette = {
   skeleton: '#1E2839',
 };
 
+/**
+ * The brand palette, sampled from the launch artwork rather than guessed.
+ *
+ * These are fixed in both themes on purpose: the launch screen and the sign-in
+ * header are the one place the product should look the same to everybody, and
+ * a brand that changes colour with the system setting is not a brand. The
+ * accent is the orange from the mark — `#D57E5F` at 80% over the navy is
+ * exactly the ring in the artwork.
+ */
+export const brand = {
+  navy: '#3C5A7D',
+  /** A shade down, for the gradient-ish depth behind the mark. */
+  navyDeep: '#324C6B',
+  accent: '#D57E5F',
+  onBrand: '#FFFFFF',
+  onBrandMuted: '#B6C1CE',
+  /** The unfilled half of the launch progress bar. */
+  track: '#6A819C',
+  /** Hairline circles in the artwork. */
+  hairline: 'rgba(255, 255, 255, 0.16)',
+  /** The glassy tile the mark sits on. */
+  tile: 'rgba(255, 255, 255, 0.08)',
+  tileBorder: 'rgba(255, 255, 255, 0.22)',
+} as const;
+
 export type ThemeColors = Palette;
 
 export interface Theme {

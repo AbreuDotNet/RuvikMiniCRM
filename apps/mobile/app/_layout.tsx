@@ -80,13 +80,19 @@ function ThemedRoot() {
           headerTitleStyle: { color: theme.colors.text, fontSize: 17, fontWeight: '600' },
           headerShadowVisible: false,
           animation: 'slide_from_right',
+          // Slightly quicker than the platform default: these are utility
+          // pushes inside a working tool, not a first-run experience.
+          animationDuration: 260,
         }}
       >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(customer)" />
-        <Stack.Screen name="(provider)" />
-        <Stack.Screen name="(admin)" />
+        {/* These five are swapped by a redirect, not pushed by the user, so
+            they cross-fade. A horizontal slide would imply a back gesture
+            that does not exist — there is nothing behind a role home. */}
+        <Stack.Screen name="index" options={{ animation: 'none' }} />
+        <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="(customer)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="(provider)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="(admin)" options={{ animation: 'fade' }} />
 
         <Stack.Screen name="provider/[slug]" options={{ headerShown: true, title: '' }} />
         <Stack.Screen name="service/[id]" options={{ headerShown: true, title: 'Service' }} />
