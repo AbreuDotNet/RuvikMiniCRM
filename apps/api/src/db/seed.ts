@@ -63,7 +63,7 @@ const PLANS = [
       'Up to 10 clients',
       '20 receipts a month',
       'Contacts, jobs and quotes',
-      'Public profile and 3 listings',
+      'Your public profile in search',
     ],
   },
   {
@@ -85,7 +85,7 @@ const PLANS = [
       'Export tax reports',
       'Estimated quarterly taxes, calculated',
       'Priority support',
-      '25 listings',
+      'Everything in Starter, uncapped',
     ],
   },
   {
@@ -110,7 +110,7 @@ const PLANS = [
       'Add an assistant or employee',
       'Card payments recorded automatically',
       'Advanced cloud backup',
-      'Unlimited listings',
+      'No caps anywhere',
     ],
   },
 ];
@@ -141,6 +141,23 @@ interface ProviderSeed {
   years: number;
   verified: boolean;
   plan: string;
+  /**
+   * The subscription's state, so the demo covers more than "everything is
+   * fine". Between them these five accounts exercise every branch the
+   * entitlements module has:
+   *
+   *   `active`    — the ordinary case.
+   *   `past_due`  — the grace window. Still entitled, still in search.
+   *   `cancelled` — entitled to nothing; listings drop out of search.
+   *   `none`      — no subscription row at all, which must fall back to the
+   *                 most restrictive active plan rather than to no limits.
+   */
+  planStatus?: 'active' | 'past_due' | 'cancelled' | 'none';
+  /**
+   * Pads the client book up to this many, so one demo account sits exactly on
+   * its plan's ceiling. A limit nobody can see hit is a limit nobody tests.
+   */
+  fillClientsTo?: number;
   services: Array<{
     title: string; short: string; description: string;
     pricing: 'fixed' | 'starting_at' | 'request_quote';
@@ -156,7 +173,7 @@ const PROVIDERS: ProviderSeed[] = [
     city: 'Austin', state: 'TX', postalCode: '78704',
     addressLine: '1120 South Lamar Boulevard', phone: '+15125550111',
     taxRateBp: 825, labourTaxable: false,
-    taxNote: 'Texas 6.25% state plus 2% Austin local. Labour on residential real property is outside the tax; materials are taxable.', category: 'plumbing', years: 12, verified: true, plan: 'pro',
+    taxNote: 'Texas 6.25% state plus 2% Austin local. Labour on residential real property is outside the tax; materials are taxable.', category: 'plumbing', years: 12, verified: true, plan: 'pro', planStatus: 'active',
     services: [
       { title: 'Toilet repair & valve replacement', short: 'Running or leaking toilet fixed same day', description: 'Diagnosis, flush valve or fill valve replacement, seal check and clean-up. Parts for standard models included.', pricing: 'fixed', price: 12000, duration: 90 },
       { title: 'Water heater installation', short: 'Supply and fit electric or gas units', description: 'Removal of the old unit, fitting, pressure testing and commissioning. Price varies with unit size and pipework.', pricing: 'starting_at', price: 30000, duration: 240 },
@@ -170,7 +187,7 @@ const PROVIDERS: ProviderSeed[] = [
     city: 'Brooklyn', state: 'NY', postalCode: '11215',
     addressLine: '338 Fifth Avenue', phone: '+17185550222',
     taxRateBp: 888, labourTaxable: true,
-    taxNote: 'New York 4% state plus 4.875% New York City. Repair, maintenance and installation to real property: labour and materials are both taxable.', category: 'electrical', years: 9, verified: true, plan: 'pro',
+    taxNote: 'New York 4% state plus 4.875% New York City. Repair, maintenance and installation to real property: labour and materials are both taxable.', category: 'electrical', years: 9, verified: true, plan: 'business', planStatus: 'active',
     services: [
       { title: 'Electrical panel upgrade', short: 'Modern breaker panel, safely installed', description: 'Load assessment, panel replacement, labelling and certification. Includes permit paperwork.', pricing: 'starting_at', price: 45000, duration: 360 },
       { title: 'Outlet & switch installation', short: 'Add or replace points around the house', description: 'Per-point pricing for new outlets, switches and dimmers on existing circuits.', pricing: 'fixed', price: 3500, duration: 45 },
@@ -184,7 +201,7 @@ const PROVIDERS: ProviderSeed[] = [
     city: 'Portland', state: 'OR', postalCode: '97214',
     addressLine: '2215 Southeast Hawthorne Boulevard', phone: '+15035550333',
     taxRateBp: 0, labourTaxable: false,
-    taxNote: 'Oregon levies no general sales tax, so nothing is charged on these documents.', category: 'carpentry', years: 15, verified: true, plan: 'business',
+    taxNote: 'Oregon levies no general sales tax, so nothing is charged on these documents.', category: 'carpentry', years: 15, verified: true, plan: 'pro', planStatus: 'active',
     services: [
       { title: 'Fitted wardrobe (made to measure)', short: 'Designed, built and installed', description: 'Survey, 3D drawing, build in our workshop and installation. Priced per linear metre of finished unit.', pricing: 'request_quote', duration: 2400 },
       { title: 'Interior door hanging', short: 'Supply and hang, per door', description: 'Includes frame adjustment, hinges, handle fitting and finishing.', pricing: 'fixed', price: 7500, duration: 120 },
@@ -198,7 +215,7 @@ const PROVIDERS: ProviderSeed[] = [
     city: 'Phoenix', state: 'AZ', postalCode: '85016',
     addressLine: '3402 East Camelback Road', phone: '+16025550444',
     taxRateBp: 860, labourTaxable: true,
-    taxNote: 'Arizona transaction privilege tax, 5.6% state plus Phoenix local. Contracting is taxed under its own classification — confirm with a CPA.', category: 'hvac', years: 7, verified: false, plan: 'starter',
+    taxNote: 'Arizona transaction privilege tax, 5.6% state plus Phoenix local. Contracting is taxed under its own classification — confirm with a CPA.', category: 'hvac', years: 7, verified: false, plan: 'starter', planStatus: 'active', fillClientsTo: 10,
     services: [
       { title: 'Split AC service & deep clean', short: 'Restore cooling and cut running costs', description: 'Coil clean, filter replacement, gas pressure check and drainage clear-out.', pricing: 'fixed', price: 6500, duration: 90 },
       { title: 'Split AC installation', short: 'Supply and install, 12,000–24,000 BTU', description: 'Wall bracket, piping up to 3m, vacuum and commissioning. Unit supplied or bring your own.', pricing: 'starting_at', price: 28000, duration: 300 },
@@ -212,10 +229,52 @@ const PROVIDERS: ProviderSeed[] = [
     city: 'Miami', state: 'FL', postalCode: '33130',
     addressLine: '1035 Southwest 8th Street', phone: '+13055550555',
     taxRateBp: 700, labourTaxable: true,
-    taxNote: 'Florida 6% state plus 1% Miami-Dade discretionary surtax.', category: 'painting', years: 6, verified: false, plan: 'starter',
+    taxNote: 'Florida 6% state plus 1% Miami-Dade discretionary surtax.', category: 'painting', years: 6, verified: false, plan: 'starter', planStatus: 'active', fillClientsTo: 4,
     services: [
       { title: 'Interior room repaint', short: 'Walls and ceiling, two coats', description: 'Filling, sanding, masking and two coats of premium emulsion. Priced per standard room.', pricing: 'starting_at', price: 14000, duration: 480 },
       { title: 'Exterior facade painting', short: 'Weatherproof finish for the whole house', description: 'Pressure wash, crack repair, primer and two coats of exterior-grade paint.', pricing: 'request_quote', duration: 2880 },
+    ],
+  },
+  {
+    email: 'ironclad@ruvik.demo', fullName: 'Sofía Marte', businessName: 'Ironclad Handyman',
+    tagline: 'Small jobs, done properly',
+    bio: 'Two-person crew covering Denver for the jobs that are too small for a contractor and too fiddly for a Saturday. Shelves, doors, patches, flat-pack.',
+    city: 'Denver', state: 'CO', postalCode: '80205',
+    addressLine: '2736 Welton Street', phone: '+13035550666',
+    taxRateBp: 811, labourTaxable: false,
+    taxNote: 'Colorado 2.9% state plus Denver local. Labour on real property is generally outside the tax; materials are taxable.',
+    category: 'repairs', years: 3, verified: false, plan: 'starter', planStatus: 'none',
+    services: [
+      { title: 'Flat-pack assembly', short: 'Wardrobes, desks and shelving units', description: 'Assembled, levelled and anchored to the wall where the design calls for it. Packaging taken away.', pricing: 'fixed', price: 8000, duration: 120 },
+      { title: 'Drywall patch & repaint', short: 'Holes and dents made to disappear', description: 'Cut back, patch, sand and repaint to match. Priced per patch up to A4 size.', pricing: 'fixed', price: 11000, duration: 150 },
+    ],
+  },
+  {
+    email: 'sunrise@ruvik.demo', fullName: 'Tomás Beltrán', businessName: 'Sunrise Cleaning Co',
+    tagline: 'Move-outs, deep cleans and weekly upkeep',
+    bio: 'Seattle crew of four. Bonded and insured, with a fixed checklist you get a copy of before and after every visit.',
+    city: 'Seattle', state: 'WA', postalCode: '98122',
+    addressLine: '1425 Broadway', phone: '+12065550777',
+    taxRateBp: 1025, labourTaxable: true,
+    taxNote: 'Washington 6.5% state plus Seattle local. Retail services including cleaning are taxable in full.',
+    category: 'cleaning', years: 5, verified: true, plan: 'pro', planStatus: 'past_due',
+    services: [
+      { title: 'Move-out deep clean', short: 'Get the deposit back', description: 'Oven, fridge, skirting, inside cupboards, windows and floors. Priced per bedroom.', pricing: 'starting_at', price: 22000, duration: 300 },
+      { title: 'Weekly home clean', short: 'Same crew, same day each week', description: 'Kitchen, bathrooms, floors and surfaces. Products included.', pricing: 'fixed', price: 12000, duration: 180 },
+    ],
+  },
+  {
+    email: 'oldschool@ruvik.demo', fullName: 'Gabriela Ruiz', businessName: 'Old School Appliance Repair',
+    tagline: 'Fix it before you replace it',
+    bio: 'Chicago workshop repairing washers, dryers, fridges and ovens. Thirty years of parts on the shelf, and a diagnosis before any money changes hands.',
+    city: 'Chicago', state: 'IL', postalCode: '60647',
+    addressLine: '2438 North Milwaukee Avenue', phone: '+17735550888',
+    taxRateBp: 1025, labourTaxable: false,
+    taxNote: 'Illinois 6.25% state plus Chicago and Cook County local. Repair labour stated separately is outside the tax; parts are taxable.',
+    category: 'appliances', years: 30, verified: true, plan: 'pro', planStatus: 'cancelled',
+    services: [
+      { title: 'Appliance diagnosis', short: 'Find out what is wrong, and what it costs', description: 'On-site diagnosis with a written quote. Credited against the repair if you go ahead.', pricing: 'fixed', price: 6500, duration: 60 },
+      { title: 'Washer & dryer repair', short: 'Drums, belts, pumps and boards', description: 'Most common faults fixed on the first visit from van stock.', pricing: 'starting_at', price: 14000, duration: 120 },
     ],
   },
 ];
@@ -409,13 +468,36 @@ export async function seed(): Promise<void> {
     const providerId = provRows[0].id;
     providerIds.set(p.email, providerId);
 
-    await db.query(
-      `INSERT INTO subscriptions (provider_id, plan_id, status, current_period_start, current_period_end,
-                                  external_ref)
-       VALUES ($1,$2,$3, now(), now() + interval '1 month', $4)`,
-      [providerId, planIds.get(p.plan), p.plan === 'starter' ? 'active' : 'active',
-       `sub_demo_${p.plan}_${providerId.slice(0, 8)}`],
-    );
+    /*
+     * The subscription, in whichever state this account is meant to
+     * demonstrate.
+     *
+     * `none` writes no row at all — that is the case worth having, because a
+     * provider without a subscription must fall back to the most restrictive
+     * active plan rather than to no limits, and the only way to see that is
+     * to have an account in that state.
+     *
+     * A cancelled subscription is dated in the past: cancelling today would
+     * leave the period still running, which is not what "cancelled" is here
+     * to show.
+     */
+    const status = p.planStatus ?? 'active';
+    if (status !== 'none') {
+      const period = status === 'cancelled'
+        ? "now() - interval '2 months', now() - interval '1 month'"
+        : "now(), now() + interval '1 month'";
+
+      await db.query(
+        `INSERT INTO subscriptions (provider_id, plan_id, status, current_period_start,
+                                    current_period_end, cancelled_at, external_ref)
+         VALUES ($1,$2,$3, ${period}, $4, $5)`,
+        [
+          providerId, planIds.get(p.plan), status,
+          status === 'cancelled' ? new Date(Date.now() - 30 * 86_400_000) : null,
+          `sub_demo_${p.plan}_${providerId.slice(0, 8)}`,
+        ],
+      );
+    }
 
     for (const s of p.services) {
       await db.query(
@@ -548,8 +630,56 @@ export async function seed(): Promise<void> {
   });
 
   await seedProviderLifecycle(db);
+  await fillClientBooks(db, providerIds);
 
   logger.info('demo data seeded');
+}
+
+/**
+ * Tops a provider's client book up to the number their demo account needs.
+ *
+ * Run last, once the journeys have created the clients they need, so the
+ * padding lands on top rather than being spent by them. The point is to have
+ * one account sitting exactly on its plan's ceiling: a limit nobody can see
+ * hit is a limit nobody tests, and "Clients 10 of 10" on the subscription
+ * screen is worth more than any amount of documentation.
+ */
+async function fillClientBooks(
+  db: Awaited<ReturnType<typeof getDb>>,
+  providerIds: Map<string, string>,
+): Promise<void> {
+  const FILLER_NAMES = [
+    'Marisol Cabrera', 'Héctor Villanueva', 'Yolanda Prieto', 'Ramón Esquivel',
+    'Beatriz Alcántara', 'Joaquín Mendoza', 'Noelia Carrasco', 'Ismael Duarte',
+    'Paulina Rivas', 'Cristóbal Aguirre', 'Rosario Ledesma', 'Emilio Sandoval',
+  ];
+
+  for (const p of PROVIDERS) {
+    if (!p.fillClientsTo) continue;
+    const providerId = providerIds.get(p.email);
+    if (!providerId) continue;
+
+    const { rows } = await db.query<{ count: string }>(
+      'SELECT count(*)::text FROM clients WHERE provider_id = $1',
+      [providerId],
+    );
+    const existing = Number(rows[0].count);
+
+    for (let i = existing; i < p.fillClientsTo; i += 1) {
+      const name = FILLER_NAMES[i % FILLER_NAMES.length];
+      await db.query(
+        `INSERT INTO clients (provider_id, full_name, phone_e164, city, region, postal_code)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [
+          providerId,
+          // Suffixed past the first pass so a long fill cannot collide.
+          i < FILLER_NAMES.length ? name : `${name} (${Math.floor(i / FILLER_NAMES.length) + 1})`,
+          `+1602555${String(2000 + i).slice(-4)}`,
+          p.city, p.state, p.postalCode,
+        ],
+      );
+    }
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1018,11 +1148,84 @@ async function buildPipeline(
 const isEntrypoint =
   process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
+/**
+ * Prints the demo accounts grouped by what they are there to show.
+ *
+ * Read back from the database rather than from `PROVIDERS`, so the list is
+ * what was actually written — including the client counts, which the seed
+ * builds up across several passes and nobody could predict from the source.
+ */
+async function printAccounts(): Promise<void> {
+  const db = await getDb();
+  const { rows } = await db.query<{
+    email: string; business_name: string; plan: string | null; status: string | null;
+    effective_plan: string; effective_max_clients: number | null; clients: string;
+  }>(
+    /*
+     * Two plans per row, because they are different questions.
+     *
+     * `plan`/`status` are what the subscription says. `effective_*` is what
+     * the entitlements module would actually resolve — the live plan if there
+     * is one, else the cheapest active plan. Printing only the first would
+     * tell you that the account with no subscription has unlimited clients,
+     * which is the exact failure the fallback exists to prevent.
+     */
+    `WITH fallback AS (
+       SELECT id, name, max_clients FROM subscription_plans
+        WHERE is_active = true ORDER BY price_cents, sort_order LIMIT 1
+     )
+     SELECT u.email, p.business_name,
+            sp.name AS plan,
+            s.status,
+            COALESCE(live_plan.name, fallback.name) AS effective_plan,
+            CASE WHEN live_plan.id IS NULL THEN fallback.max_clients
+                 ELSE live_plan.max_clients END AS effective_max_clients,
+            (SELECT count(*)::text FROM clients c WHERE c.provider_id = p.id) AS clients
+       FROM providers p
+       JOIN users u ON u.id = p.user_id
+       CROSS JOIN fallback
+       LEFT JOIN subscriptions s ON s.provider_id = p.id
+       LEFT JOIN subscription_plans sp ON sp.id = s.plan_id
+       LEFT JOIN subscriptions live ON live.provider_id = p.id
+        AND live.status IN ('trialing','active','past_due')
+       LEFT JOIN subscription_plans live_plan ON live_plan.id = live.plan_id
+      ORDER BY sp.price_cents NULLS FIRST, u.email`,
+  );
+
+  const line = (...cells: string[]) =>
+    cells.map((c, i) => c.padEnd([26, 23, 11, 18, 12, 16][i] ?? 0)).join('');
+
+  /* eslint-disable no-console */
+  console.log('');
+  console.log(`Demo accounts — password for all of them: ${DEMO_PASSWORD}`);
+  console.log('');
+  console.log(line('PROVIDER', 'BUSINESS', 'SUBSCRIBED', 'STATUS', 'ENTITLED', 'CLIENTS USED'));
+  console.log('-'.repeat(106));
+  for (const r of rows) {
+    // Subscribed and entitled are different columns because they are
+    // different facts: a cancelled Pro account is living under Starter's
+    // limits, and a table that showed only the first would say otherwise.
+    const limit = r.effective_max_clients;
+    console.log(line(
+      r.email,
+      r.business_name.slice(0, 22),
+      r.plan ?? '—',
+      r.status ?? 'no subscription',
+      r.effective_plan,
+      limit === null ? `${r.clients} / unlimited` : `${r.clients} / ${limit}`,
+    ));
+  }
+  console.log('');
+  console.log('Customers: ana@ruvik.demo · pedro@ruvik.demo · lucia@ruvik.demo · diego@ruvik.demo');
+  console.log('Admin:     admin@ruvik.demo');
+  console.log('');
+  /* eslint-enable no-console */
+}
+
 if (isEntrypoint) {
   seed()
+    .then(printAccounts)
     .then(() => {
-      // eslint-disable-next-line no-console
-      console.log(`Seed complete. Demo accounts use the password: ${DEMO_PASSWORD}`);
       process.exit(0);
     })
     .catch((err) => {
