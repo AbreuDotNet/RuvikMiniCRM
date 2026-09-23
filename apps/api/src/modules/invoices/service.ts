@@ -9,6 +9,9 @@ import { writeAudit } from '../../lib/audit.js';
 import { notify } from '../notifications/service.js';
 import { randomToken, sha256 } from '../../lib/crypto.js';
 import { signStorageUrl } from '../../lib/storage.js';
+import {
+  assertWithinQuota, countReceiptsThisMonth, getEntitlements,
+} from '../billing/entitlements.js';
 
 export interface InvoiceLineInput {
   description: string;
@@ -437,6 +440,32 @@ export async function recordPayment(
     if (!inv) throw notFound('That invoice was not found.');
     if (inv.status === 'void') throw conflict('That invoice has been voided.');
     if (inv.status === 'draft') throw conflict('Send the invoice before recording a payment.');
+
+    /*
+     * The plan's monthly receipt allowance.
+     *
+     * Checked here rather than at the route because this is where the receipt
+     * number is actually minted, and the invoice row is already locked — so
+     * the count and the insert cannot interleave.
+     *
+     * Deliberately before any money is written: refusing after recording the
+     * payment would leave the invoice paid and the customer without the
+     * receipt they were handed.
+     */
+    const entitlements = await getEntitlements(providerId, c);
+    if (entitlements.limits.maxReceiptsPerMonth !== null) {
+      const used = await countReceiptsThisMonth(providerId, c);
+      assertWithinQuota(
+        {
+          used,
+          limit: entitlements.limits.maxReceiptsPerMonth,
+          exhausted: used >= entitlements.limits.maxReceiptsPerMonth,
+        },
+        entitlements,
+        'receipts',
+        'a month',
+      );
+    }
 
     const newPaid = inv.amount_paid_cents + input.amountCents;
     if (newPaid > inv.total_cents) {

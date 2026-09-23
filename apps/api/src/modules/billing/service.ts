@@ -39,22 +39,36 @@ export async function scheduleGraceExpiry(c: Queryable, subscriptionId: string) 
 export async function listPlans() {
   const db = await getDb();
   const { rows } = await db.query<any>(
-    `SELECT id, code, name, description, price_cents, currency, interval, trial_days,
-            max_services, max_quotes_per_month, features
+    `SELECT id, code, name, tagline, description, price_cents, currency, interval, trial_days,
+            max_clients, max_receipts_per_month, max_services, max_quotes_per_month,
+            max_team_members, capabilities, features
        FROM subscription_plans WHERE is_active = true ORDER BY sort_order, price_cents`,
   );
   return rows.map((p) => ({
     id: p.id,
     code: p.code,
     name: p.name,
+    tagline: p.tagline,
     description: p.description,
     priceCents: p.price_cents,
     currency: p.currency,
     interval: p.interval,
     trialDays: p.trial_days,
+    // Grouped rather than flat: a pricing screen renders the allowances
+    // together, and three of these were simply not exposed before.
+    limits: {
+      maxClients: p.max_clients,
+      maxReceiptsPerMonth: p.max_receipts_per_month,
+      maxServices: p.max_services,
+      maxQuotesPerMonth: p.max_quotes_per_month,
+      maxTeamMembers: p.max_team_members,
+    },
+    capabilities: p.capabilities ?? [],
+    features: p.features,
+    // Kept beside `limits` so the existing web and mobile screens keep working
+    // while they move over to the grouped shape.
     maxServices: p.max_services,
     maxQuotesPerMonth: p.max_quotes_per_month,
-    features: p.features,
   }));
 }
 
@@ -64,7 +78,8 @@ export async function getSubscription(providerId: string) {
     `SELECT s.id, s.status, s.current_period_start, s.current_period_end,
             s.cancel_at_period_end, s.cancelled_at, s.created_at,
             sp.id AS plan_id, sp.code, sp.name, sp.price_cents, sp.currency, sp.interval,
-            sp.max_services, sp.features
+            sp.max_clients, sp.max_receipts_per_month, sp.max_services,
+            sp.max_quotes_per_month, sp.max_team_members, sp.capabilities, sp.features
        FROM subscriptions s JOIN subscription_plans sp ON sp.id = s.plan_id
       WHERE s.provider_id = $1
       ORDER BY s.created_at DESC LIMIT 1`,
@@ -89,7 +104,16 @@ export async function getSubscription(providerId: string) {
     createdAt: s.created_at,
     plan: {
       id: s.plan_id, code: s.code, name: s.name, priceCents: s.price_cents,
-      currency: s.currency, interval: s.interval, maxServices: s.max_services, features: s.features,
+      currency: s.currency, interval: s.interval, features: s.features,
+      limits: {
+        maxClients: s.max_clients,
+        maxReceiptsPerMonth: s.max_receipts_per_month,
+        maxServices: s.max_services,
+        maxQuotesPerMonth: s.max_quotes_per_month,
+        maxTeamMembers: s.max_team_members,
+      },
+      capabilities: s.capabilities ?? [],
+      maxServices: s.max_services,
     },
     payments: payments.rows.map((p) => ({
       amountCents: p.amount_cents, currency: p.currency, status: p.status,

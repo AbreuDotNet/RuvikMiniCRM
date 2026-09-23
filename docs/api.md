@@ -131,7 +131,8 @@ Responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`.
 | GET | `/dashboard` | Leads, upcoming work, outstanding money, 6-month activity |
 | GET/POST | `/services` | Plan listing limit enforced server-side |
 | PATCH/DELETE | `/services/:id` | Tenant-scoped |
-| GET/POST | `/clients` | `q` searches name, email, phone |
+| GET | `/entitlements` | Plan limits, capabilities and current usage |
+| GET/POST | `/clients` | `q` searches name, email, phone; plan client limit enforced |
 | GET/PATCH | `/clients/:id` | |
 | GET/POST | `/jobs` | Filter by `status`, `clientId`, `q` |
 | GET | `/jobs/:id` | Includes notes, quotes, invoices, timeline |
@@ -211,6 +212,8 @@ Reads need `aal1`; **every state change needs `aal=mfa`**.
 | POST/PATCH | `/categories`, `/categories/:id` | ✓ | |
 | GET | `/reviews` | — | |
 | POST | `/reviews/:id/moderate` | ✓ | Recomputes the provider rating |
+| GET | `/plans` | — | Catalogue with subscriber counts |
+| POST/PATCH | `/plans`, `/plans/:id` | ✓ | Prices, limits and capabilities |
 | GET | `/audit-logs` | — | |
 | GET | `/audit-logs/integrity` | ✓ | Re-walks the hash chain |
 | GET/POST | `/support-tickets` | — | |

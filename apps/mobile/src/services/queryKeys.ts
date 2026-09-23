@@ -30,6 +30,7 @@ export const qk = {
     profile: ['provider', 'profile'] as const,
     services: ['provider', 'services'] as const,
     taxSettings: ['provider', 'tax-settings'] as const,
+    entitlements: ['provider', 'entitlements'] as const,
     calendar: (from: string, to: string) => ['provider', 'calendar', from, to] as const,
   },
 

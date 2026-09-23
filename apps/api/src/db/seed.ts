@@ -27,23 +27,91 @@ const CATEGORIES = [
   { slug: 'appliances', name: 'Appliances',  icon: 'appliances', sort: 80, description: 'Washer, fridge and oven repair.' },
 ];
 
+/**
+ * The launch plan catalogue.
+ *
+ * Prices are the ones the business chose, with two notes worth keeping:
+ *
+ *   * **Starter is $0 rather than $4.99.** The brief allowed either. No
+ *     payment gateway is wired yet, and a priced entry tier would mean nobody
+ *     can finish onboarding at all — a free plan activates immediately, a
+ *     priced one waits for a webhook that is not coming. The admin can set the
+ *     price the day billing goes live; nothing else has to change.
+ *   * **Pro is $14.99**, the middle of the $12.99–$19.99 range the business
+ *     gave. It is a starting point to test against, not a decision.
+ *
+ * `maxTeamMembers` on Business is 5, not the literal "one assistant": the
+ * capability is what the plan sells, and the seat count is a knob the admin
+ * turns without a deploy.
+ */
 const PLANS = [
   {
-    code: 'starter', name: 'Starter', price: 0, interval: 'month', maxServices: 3, maxQuotes: 15, sort: 10,
-    description: 'Get listed and win your first jobs.',
-    features: ['Public profile', '3 service listings', '15 quotes per month', 'In-app notifications'],
+    code: 'starter',
+    name: 'Starter',
+    price: 0,
+    interval: 'month',
+    sort: 10,
+    tagline: 'Try it, and build your book.',
+    description: 'Everything you need to keep your first clients and receipts in one place.',
+    maxClients: 10,
+    maxReceipts: 20,
+    maxServices: 3,
+    maxQuotes: 15,
+    maxTeamMembers: 1,
+    capabilities: [] as string[],
+    features: [
+      'Up to 10 clients',
+      '20 receipts a month',
+      'Contacts, jobs and quotes',
+      'Public profile and 3 listings',
+    ],
   },
   {
-    code: 'pro', name: 'Pro', price: 2900, interval: 'month', maxServices: 25, maxQuotes: null, sort: 20,
-    description: 'For busy independent professionals.',
-    features: ['Everything in Starter', '25 listings', 'Unlimited quotes', 'Branded PDF quotes & invoices',
-               'WhatsApp delivery', 'Client CRM & calendar'],
+    code: 'pro',
+    name: 'Pro',
+    price: 1499,
+    interval: 'month',
+    sort: 20,
+    tagline: 'For the working professional.',
+    description: 'No caps, and the tax paperwork handled.',
+    maxClients: null,
+    maxReceipts: null,
+    maxServices: 25,
+    maxQuotes: null,
+    maxTeamMembers: 1,
+    capabilities: ['fiscal_reports', 'tax_estimates', 'priority_support'],
+    features: [
+      'Unlimited clients and receipts',
+      'Export tax reports',
+      'Estimated quarterly taxes, calculated',
+      'Priority support',
+      '25 listings',
+    ],
   },
   {
-    code: 'business', name: 'Business', price: 7900, interval: 'month', maxServices: null, maxQuotes: null, sort: 30,
-    description: 'For small teams and growing shops.',
-    features: ['Everything in Pro', 'Unlimited listings', 'Priority placement in search',
-               'Verified badge review', 'Priority support'],
+    code: 'business',
+    name: 'Business',
+    price: 2999,
+    interval: 'month',
+    sort: 30,
+    tagline: 'For when it is not just you.',
+    description: 'Bring in help, and let the income record itself.',
+    maxClients: null,
+    maxReceipts: null,
+    maxServices: null,
+    maxQuotes: null,
+    maxTeamMembers: 5,
+    capabilities: [
+      'fiscal_reports', 'tax_estimates', 'priority_support',
+      'team_members', 'payment_gateway', 'advanced_backup',
+    ],
+    features: [
+      'Everything in Pro',
+      'Add an assistant or employee',
+      'Card payments recorded automatically',
+      'Advanced cloud backup',
+      'Unlimited listings',
+    ],
   },
 ];
 
@@ -249,13 +317,31 @@ export async function seed(): Promise<void> {
   const planIds = new Map<string, string>();
   for (const p of PLANS) {
     const { rows } = await db.query<{ id: string }>(
-      `INSERT INTO subscription_plans (code, name, description, price_cents, currency, interval,
-                                       max_services, max_quotes_per_month, features, sort_order)
-       VALUES ($1,$2,$3,$4,'USD',$5,$6,$7,$8,$9)
-       ON CONFLICT (code) DO UPDATE SET price_cents = EXCLUDED.price_cents
+      `INSERT INTO subscription_plans (code, name, tagline, description, price_cents, currency,
+                                       interval, max_clients, max_receipts_per_month, max_services,
+                                       max_quotes_per_month, max_team_members, capabilities,
+                                       features, sort_order)
+       VALUES ($1,$2,$3,$4,$5,'USD',$6,$7,$8,$9,$10,$11,$12::text[],$13,$14)
+       -- Re-seeding an existing database must bring the whole definition up to
+       -- date, not just the price: a stale limit left behind here is a limit
+       -- nobody can explain later.
+       ON CONFLICT (code) DO UPDATE SET
+         name = EXCLUDED.name,
+         tagline = EXCLUDED.tagline,
+         description = EXCLUDED.description,
+         price_cents = EXCLUDED.price_cents,
+         max_clients = EXCLUDED.max_clients,
+         max_receipts_per_month = EXCLUDED.max_receipts_per_month,
+         max_services = EXCLUDED.max_services,
+         max_quotes_per_month = EXCLUDED.max_quotes_per_month,
+         max_team_members = EXCLUDED.max_team_members,
+         capabilities = EXCLUDED.capabilities,
+         features = EXCLUDED.features,
+         sort_order = EXCLUDED.sort_order
        RETURNING id`,
-      [p.code, p.name, p.description, p.price, p.interval, p.maxServices, p.maxQuotes,
-       JSON.stringify(p.features), p.sort],
+      [p.code, p.name, p.tagline, p.description, p.price, p.interval,
+       p.maxClients, p.maxReceipts, p.maxServices, p.maxQuotes, p.maxTeamMembers,
+       p.capabilities, JSON.stringify(p.features), p.sort],
     );
     planIds.set(p.code, rows[0].id);
   }

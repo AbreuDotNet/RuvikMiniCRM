@@ -130,6 +130,7 @@ loadtest/            Node harness + k6 profiles
 | Document | Contents |
 |---|---|
 | [architecture.md](docs/architecture.md) | Shape, request lifecycle, scaling path |
+| [plans-and-entitlements.md](docs/plans-and-entitlements.md) | Subscription tiers, limits, capabilities |
 | [data-model.md](docs/data-model.md) | Schema, conventions, indexes |
 | [api.md](docs/api.md) | Every endpoint, errors, pagination, limits |
 | [rbac.md](docs/rbac.md) | Full permission matrix, tenant isolation |

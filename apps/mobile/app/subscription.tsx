@@ -9,6 +9,8 @@ import {
 import {
   useCancelSubscription, usePlans, useStartSubscription, useSubscription,
 } from '../src/features/billing/hooks';
+import { PlanUsage } from '../src/features/billing/PlanUsage';
+import { useEntitlements } from '../src/features/billing/usage';
 import { openInAppBrowser } from '../src/services/files';
 import { errorMessage } from '../src/services/api';
 import { useAuth } from '../src/state/auth';
@@ -30,6 +32,7 @@ function SubscriptionScreen() {
 
   const plans = usePlans();
   const subscription = useSubscription();
+  const entitlements = useEntitlements();
   const start = useStartSubscription();
   const cancel = useCancelSubscription();
 
@@ -63,6 +66,7 @@ function SubscriptionScreen() {
       }
 
       await refreshUser();
+      void entitlements.refetch();
     } catch (err) {
       notify(errorMessage(err), 'error');
     } finally {
@@ -152,6 +156,8 @@ function SubscriptionScreen() {
           message="Choose a plan — the free one included — for your listings to appear in search."
         />
       )}
+
+      {entitlements.data ? <PlanUsage entitlements={entitlements.data} /> : null}
 
       <Stack gap={spacing.sm}>
         <SectionHeader title="Plans" />

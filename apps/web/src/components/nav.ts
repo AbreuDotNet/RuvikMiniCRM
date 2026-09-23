@@ -25,5 +25,6 @@ export const ADMIN_TABS: TabItem[] = [
   { to: '/admin/providers', label: 'Providers', icon: 'briefcase' },
   { to: '/admin/users', label: 'Users', icon: 'users' },
   { to: '/admin/reviews', label: 'Reviews', icon: 'star' },
+  { to: '/admin/plans', label: 'Plans', icon: 'receipt' },
   { to: '/admin/audit', label: 'Audit', icon: 'shield' },
 ];

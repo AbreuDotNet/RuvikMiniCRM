@@ -13,12 +13,13 @@ import { writeAudit, verifyAuditChain } from '../../lib/audit.js';
 import { revokeAllForUser } from '../../lib/tokens.js';
 import { notify } from '../notifications/service.js';
 import { queueDepth } from '../../lib/queue.js';
-import { notFound, badRequest } from '../../lib/errors.js';
+import { notFound, badRequest, conflict } from '../../lib/errors.js';
 import {
   EFFECTIVE_STATES, VERIFICATION_STATUSES, PROVIDER_ACTIONS,
   effectiveState, allowedActions, actionForLegacyStatus,
 } from '../../lib/providerLifecycle.js';
 import { applyProviderAction } from './providerService.js';
+import { CAPABILITIES, UNIMPLEMENTED_CAPABILITIES } from '../billing/entitlements.js';
 
 export const adminRouter = Router();
 // Every admin route: authenticated, role-checked, and rate limited tighter
@@ -881,5 +882,237 @@ adminRouter.post(
     );
     if (!rowCount) throw notFound('Ticket not found.');
     res.json({ id: req.params.id, status: req.body.status });
+  }),
+);
+
+/* --------------------------------- plans ---------------------------------- */
+
+/**
+ * Plan management.
+ *
+ * The catalogue is the commercial model in data: what each tier costs, how
+ * much of the product it includes, and which capabilities it unlocks. It is
+ * editable here rather than only in a seed file so pricing can change without
+ * a deploy — which is the only way a price ever actually gets tested.
+ *
+ * Two things the admin deliberately cannot do:
+ *
+ *   * **Delete a plan.** The foreign key from `subscriptions` is RESTRICT, and
+ *     that is the right answer: a deleted plan would orphan the billing
+ *     history of everyone who ever paid for it. Deactivating hides it from
+ *     signup while leaving existing subscribers exactly where they are.
+ *   * **Deactivate the last active plan.** With none active there is nothing
+ *     for a new provider to choose and nothing for the entitlements fallback
+ *     to resolve to, so the product would stop enrolling anyone.
+ */
+
+const planLimitsSchema = z.object({
+  // Null is unlimited everywhere. The database also refuses zero, which reads
+  // as "unset" at a glance but means "nothing allowed".
+  maxClients: z.number().int().positive().nullable().optional(),
+  maxReceiptsPerMonth: z.number().int().positive().nullable().optional(),
+  maxServices: z.number().int().positive().nullable().optional(),
+  maxQuotesPerMonth: z.number().int().positive().nullable().optional(),
+  maxTeamMembers: z.number().int().min(1).max(500).optional(),
+  capabilities: z.array(z.enum(CAPABILITIES)).max(20).optional(),
+  features: z.array(safeText(120)).max(20).optional(),
+});
+
+adminRouter.get(
+  '/plans',
+  asyncHandler(async (_req, res) => {
+    const db = await getDb();
+    const { rows } = await db.query<any>(
+      // Subscriber counts come from the same query: an admin deciding whether
+      // to retire a tier needs to know who is standing on it.
+      `SELECT sp.*,
+              (SELECT count(*)::text FROM subscriptions s
+                WHERE s.plan_id = sp.id
+                  AND s.status IN ('trialing','active','past_due')) AS live_subscribers,
+              (SELECT count(*)::text FROM subscriptions s WHERE s.plan_id = sp.id) AS all_subscribers
+         FROM subscription_plans sp
+        ORDER BY sp.sort_order, sp.price_cents`,
+    );
+
+    res.json({
+      data: rows.map((p) => ({
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        tagline: p.tagline,
+        description: p.description,
+        priceCents: p.price_cents,
+        currency: p.currency,
+        interval: p.interval,
+        trialDays: p.trial_days,
+        isActive: p.is_active,
+        sortOrder: p.sort_order,
+        limits: {
+          maxClients: p.max_clients,
+          maxReceiptsPerMonth: p.max_receipts_per_month,
+          maxServices: p.max_services,
+          maxQuotesPerMonth: p.max_quotes_per_month,
+          maxTeamMembers: p.max_team_members,
+        },
+        capabilities: p.capabilities ?? [],
+        features: p.features ?? [],
+        subscribers: {
+          live: Number(p.live_subscribers),
+          total: Number(p.all_subscribers),
+        },
+      })),
+      // Named here so the admin UI offers the real vocabulary rather than a
+      // free-text box that produces capabilities nothing checks for.
+      knownCapabilities: CAPABILITIES,
+      unimplementedCapabilities: UNIMPLEMENTED_CAPABILITIES,
+    });
+  }),
+);
+
+adminRouter.post(
+  '/plans',
+  requireMfa,
+  validate(planLimitsSchema.extend({
+    code: z.string().regex(/^[a-z0-9_-]{2,40}$/, 'Use lowercase letters, numbers and dashes.'),
+    name: safeText(60, 2),
+    tagline: safeText(120).optional().nullable(),
+    description: safeText(300).optional().nullable(),
+    priceCents: z.number().int().min(0).max(1_000_000),
+    currency: z.string().length(3).default('USD'),
+    interval: z.enum(['month', 'year']).default('month'),
+    trialDays: z.number().int().min(0).max(365).default(0),
+    sortOrder: z.number().int().min(0).max(9999).default(100),
+    isActive: z.boolean().default(true),
+  })),
+  asyncHandler(async (req, res) => {
+    const b = req.body;
+    const db = await getDb();
+
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO subscription_plans
+         (code, name, tagline, description, price_cents, currency, interval, trial_days,
+          max_clients, max_receipts_per_month, max_services, max_quotes_per_month,
+          max_team_members, capabilities, features, is_active, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::text[],$15,$16,$17)
+       RETURNING id`,
+      [b.code, b.name, b.tagline ?? null, b.description ?? null, b.priceCents, b.currency,
+       b.interval, b.trialDays, b.maxClients ?? null, b.maxReceiptsPerMonth ?? null,
+       b.maxServices ?? null, b.maxQuotesPerMonth ?? null, b.maxTeamMembers ?? 1,
+       b.capabilities ?? [], JSON.stringify(b.features ?? []), b.isActive, b.sortOrder],
+    );
+
+    await writeAudit({
+      actorUserId: req.auth!.userId, actorRole: 'admin', action: 'admin.plan_created',
+      entityType: 'subscription_plan', entityId: rows[0].id,
+      metadata: { code: b.code, priceCents: b.priceCents },
+      ...ctxOf(req),
+    });
+
+    res.status(201).json({ id: rows[0].id });
+  }),
+);
+
+adminRouter.patch(
+  '/plans/:id',
+  requireMfa,
+  validate(z.object({ id: uuidSchema }), 'params'),
+  validate(planLimitsSchema.extend({
+    name: safeText(60, 2).optional(),
+    tagline: safeText(120).optional().nullable(),
+    description: safeText(300).optional().nullable(),
+    priceCents: z.number().int().min(0).max(1_000_000).optional(),
+    trialDays: z.number().int().min(0).max(365).optional(),
+    sortOrder: z.number().int().min(0).max(9999).optional(),
+    isActive: z.boolean().optional(),
+  })),
+  asyncHandler(async (req, res) => {
+    const map: Record<string, string> = {
+      name: 'name',
+      tagline: 'tagline',
+      description: 'description',
+      priceCents: 'price_cents',
+      trialDays: 'trial_days',
+      sortOrder: 'sort_order',
+      isActive: 'is_active',
+      maxClients: 'max_clients',
+      maxReceiptsPerMonth: 'max_receipts_per_month',
+      maxServices: 'max_services',
+      maxQuotesPerMonth: 'max_quotes_per_month',
+      maxTeamMembers: 'max_team_members',
+    };
+
+    const sets: string[] = [];
+    const params: unknown[] = [req.params.id];
+    for (const [key, column] of Object.entries(map)) {
+      if (!(key in req.body)) continue;
+      params.push(req.body[key]);
+      sets.push(`${column} = $${params.length}`);
+    }
+    // Arrays and jsonb need their own casts, so they sit outside the map.
+    if ('capabilities' in req.body) {
+      params.push(req.body.capabilities);
+      sets.push(`capabilities = $${params.length}::text[]`);
+    }
+    if ('features' in req.body) {
+      params.push(JSON.stringify(req.body.features));
+      sets.push(`features = $${params.length}`);
+    }
+    if (!sets.length) throw badRequest('No changes were supplied.');
+
+    const db = await getDb();
+    const result = await db.tx(async (c) => {
+      const { rows: before } = await c.query<any>(
+        'SELECT code, name, price_cents, is_active FROM subscription_plans WHERE id = $1 FOR UPDATE',
+        [req.params.id],
+      );
+      if (!before[0]) throw notFound('Plan not found.');
+
+      // Turning off the last active plan leaves nothing to sign up to, and
+      // nothing for the entitlements fallback to resolve to.
+      if (req.body.isActive === false && before[0].is_active) {
+        const { rows: remaining } = await c.query<{ count: string }>(
+          `SELECT count(*)::text FROM subscription_plans
+            WHERE is_active = true AND id <> $1`,
+          [req.params.id],
+        );
+        if (Number(remaining[0].count) === 0) {
+          throw conflict(
+            'This is the only active plan. Activate another before retiring this one.',
+          );
+        }
+      }
+
+      await c.query(`UPDATE subscription_plans SET ${sets.join(', ')} WHERE id = $1`, params);
+
+      const { rows: after } = await c.query<any>(
+        'SELECT code, name, price_cents, is_active FROM subscription_plans WHERE id = $1',
+        [req.params.id],
+      );
+      return { before: before[0], after: after[0] };
+    });
+
+    /*
+     * A price change does not touch anyone's current period.
+     *
+     * Subscriptions carry their own period dates and are charged by the
+     * gateway; editing the catalogue changes what the *next* renewal quotes,
+     * not what someone has already paid. Both figures go in the audit trail so
+     * "why did my bill change" has an answer with a date on it.
+     */
+    await writeAudit({
+      actorUserId: req.auth!.userId, actorRole: 'admin', action: 'admin.plan_updated',
+      entityType: 'subscription_plan', entityId: req.params.id,
+      metadata: {
+        code: result.after.code,
+        priceBefore: result.before.price_cents,
+        priceAfter: result.after.price_cents,
+        activeBefore: result.before.is_active,
+        activeAfter: result.after.is_active,
+        changed: sets.map((s) => s.split(' = ')[0]),
+      },
+      ...ctxOf(req),
+    });
+
+    res.json({ id: req.params.id });
   }),
 );

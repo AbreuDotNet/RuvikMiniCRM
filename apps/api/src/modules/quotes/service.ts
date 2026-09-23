@@ -9,6 +9,9 @@ import { writeAudit } from '../../lib/audit.js';
 import { notify } from '../notifications/service.js';
 import { randomToken, sha256 } from '../../lib/crypto.js';
 import { signStorageUrl } from '../../lib/storage.js';
+import {
+  assertWithinQuota, countQuotesThisMonth, getEntitlements,
+} from '../billing/entitlements.js';
 
 export interface QuoteLineInput {
   description: string;
@@ -62,6 +65,29 @@ export async function createQuote(
       [input.jobId, providerId],
     );
     if (!jobRows.length) throw notFound('That job was not found.');
+
+    /*
+     * The plan's monthly quote allowance.
+     *
+     * `max_quotes_per_month` has been in the schema since the first migration
+     * and until now nothing read it: every plan advertised a quote limit and
+     * every plan had none. This is the check that makes the column mean
+     * something.
+     */
+    const entitlements = await getEntitlements(providerId, c);
+    if (entitlements.limits.maxQuotesPerMonth !== null) {
+      const used = await countQuotesThisMonth(providerId, c);
+      assertWithinQuota(
+        {
+          used,
+          limit: entitlements.limits.maxQuotesPerMonth,
+          exhausted: used >= entitlements.limits.maxQuotesPerMonth,
+        },
+        entitlements,
+        'quotes',
+        'a month',
+      );
+    }
 
     // Snapshot of the jurisdiction as it stands now. Reading it back through
     // the provider's current setting would let a later move to another state

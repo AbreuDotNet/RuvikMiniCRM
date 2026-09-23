@@ -35,6 +35,7 @@ import {
   AdminDashboardScreen, AdminProvidersScreen, AdminUsersScreen,
   AdminReviewsScreen, AdminAuditScreen,
 } from './screens/admin/AdminScreens';
+import { AdminPlansScreen } from './screens/admin/AdminPlansScreen';
 
 import './styles/theme.css';
 import './styles/app.css';
@@ -207,6 +208,7 @@ function AppRoutes() {
       <Route path="/admin/providers" element={<Protected roles={['admin']}><AdminProvidersScreen /></Protected>} />
       <Route path="/admin/users" element={<Protected roles={['admin']}><AdminUsersScreen /></Protected>} />
       <Route path="/admin/reviews" element={<Protected roles={['admin']}><AdminReviewsScreen /></Protected>} />
+      <Route path="/admin/plans" element={<Protected roles={['admin']}><AdminPlansScreen /></Protected>} />
       <Route path="/admin/audit" element={<Protected roles={['admin']}><AdminAuditScreen /></Protected>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />

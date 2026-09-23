@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { getDb } from '../../db/index.js';
+import { getDb, type Queryable } from '../../db/index.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import { authenticate, requireProvider, tenantId } from '../../middleware/auth.js';
 import { limiters } from '../../middleware/rateLimit.js';
@@ -13,6 +13,9 @@ import { paginationSchema, decodeCursor, buildPage } from '../../lib/pagination.
 import { nextNumber } from '../../lib/numbering.js';
 import { canTransition, allowedNext, JOB_STATUSES, type JobStatus } from './jobStatus.js';
 import { notify } from '../notifications/service.js';
+import {
+  assertWithinQuota, countClients, getEntitlements,
+} from '../billing/entitlements.js';
 
 export const crmRouter = Router();
 crmRouter.use(authenticate, requireProvider);
@@ -102,22 +105,51 @@ crmRouter.post(
   validate(clientSchema),
   asyncHandler(async (req, res) => {
     const b = req.body as z.infer<typeof clientSchema>;
+    const providerId = tenantId(req);
     const db = await getDb();
-    const { rows } = await db.query<{ id: string }>(
-      `INSERT INTO clients (provider_id, full_name, email, phone_e164, whatsapp_phone_e164,
-                            address_line, city, region, postal_code, tags)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-      [tenantId(req), b.fullName, b.email ?? null, b.phone ?? null, b.whatsappPhone ?? null,
-       b.addressLine ?? null, b.city ?? null, b.region ?? null, b.postalCode ?? null,
-       JSON.stringify(b.tags ?? [])],
-    );
+
+    const id = await db.tx(async (c) => {
+      await assertCanAddClient(providerId, c);
+      const { rows } = await c.query<{ id: string }>(
+        `INSERT INTO clients (provider_id, full_name, email, phone_e164, whatsapp_phone_e164,
+                              address_line, city, region, postal_code, tags)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [providerId, b.fullName, b.email ?? null, b.phone ?? null, b.whatsappPhone ?? null,
+         b.addressLine ?? null, b.city ?? null, b.region ?? null, b.postalCode ?? null,
+         JSON.stringify(b.tags ?? [])],
+      );
+      return rows[0].id;
+    });
+
     await writeAudit({
       actorUserId: req.auth!.userId, actorRole: 'provider', action: 'client.created',
-      entityType: 'client', entityId: rows[0].id, ...ctxOf(req),
+      entityType: 'client', entityId: id, ...ctxOf(req),
     });
-    res.status(201).json({ id: rows[0].id });
+    res.status(201).json({ id });
   }),
 );
+
+/**
+ * Refuses a new client once the plan's allowance is gone.
+ *
+ * The provider row is locked first so counting and inserting cannot
+ * interleave with another request doing the same — without it, two taps in
+ * quick succession both see nine clients and both insert, and a plan that
+ * says ten quietly holds eleven.
+ */
+async function assertCanAddClient(providerId: string, c: Queryable): Promise<void> {
+  await c.query('SELECT id FROM providers WHERE id = $1 FOR UPDATE', [providerId]);
+
+  const entitlements = await getEntitlements(providerId, c);
+  if (entitlements.limits.maxClients === null) return;
+
+  const used = await countClients(providerId, c);
+  assertWithinQuota(
+    { used, limit: entitlements.limits.maxClients, exhausted: used >= entitlements.limits.maxClients },
+    entitlements,
+    'clients',
+  );
+}
 
 crmRouter.get(
   '/clients/:id',
@@ -283,6 +315,10 @@ crmRouter.post(
       let clientId = b.clientId;
       let customerUserId: string | null = null;
       if (!clientId && b.newClient) {
+        // The same quota as the dedicated endpoint. Creating a job with a new
+        // client inline is a second door into the same table, and a limit
+        // enforced on only one door is not enforced.
+        await assertCanAddClient(providerId, c);
         const { rows } = await c.query<{ id: string }>(
           `INSERT INTO clients (provider_id, full_name, email, phone_e164, whatsapp_phone_e164,
                                 address_line, city, region, postal_code)

@@ -13,6 +13,9 @@ import { signStorageUrl } from '../../lib/storage.js';
 import { paginationSchema, decodeCursor, buildPage } from '../../lib/pagination.js';
 import { taxProviderFor, type LineKind } from '../../lib/tax/provider.js';
 import { OPEN_INVOICE_STATUSES, sqlIn } from '../../lib/invoiceStatus.js';
+import {
+  assertWithinQuota, countServices, getEntitlements, getUsage, UNIMPLEMENTED_CAPABILITIES,
+} from '../billing/entitlements.js';
 
 export const providerRouter = Router();
 providerRouter.use(authenticate, requireProvider);
@@ -380,25 +383,23 @@ providerRouter.post(
 
     // Plan limits are enforced server-side, never in the client.
     //
-    // The fallback matters as much as the lookup. This used to read only the
-    // live subscription and skip the check entirely when there was no row —
-    // so a provider without a plan got *unlimited* listings while a paying
-    // one was capped. Falling back to the cheapest active plan closes it: an
-    // unknown plan is treated as the most restrictive one, not as no plan.
-    const { rows: planRows } = await db.query<{ max_services: number | null; count: string }>(
-      `SELECT COALESCE(
-                (SELECT sp.max_services
-                   FROM subscriptions s JOIN subscription_plans sp ON sp.id = s.plan_id
-                  WHERE s.provider_id = $1 AND s.status IN ('active','trialing')),
-                (SELECT sp.max_services FROM subscription_plans sp
-                  WHERE sp.is_active = true ORDER BY sp.price_cents, sp.sort_order LIMIT 1)
-              ) AS max_services,
-              (SELECT count(*)::text FROM services WHERE provider_id = $1) AS count`,
-      [providerId],
-    );
-    const plan = planRows[0];
-    if (plan?.max_services != null && Number(plan.count) >= plan.max_services) {
-      throw conflict(`Your plan includes ${plan.max_services} listings. Upgrade to add more.`);
+    // Resolved through the shared entitlements module rather than a query
+    // written here: the fallback to the cheapest active plan, and the rule
+    // that `past_due` still counts, have to be the same answer everywhere.
+    // This route used to carry its own copy, and the copy was the one that
+    // once failed open.
+    const entitlements = await getEntitlements(providerId, db);
+    if (entitlements.limits.maxServices !== null) {
+      const used = await countServices(providerId, db);
+      assertWithinQuota(
+        {
+          used,
+          limit: entitlements.limits.maxServices,
+          exhausted: used >= entitlements.limits.maxServices,
+        },
+        entitlements,
+        'listings',
+      );
     }
 
     const b = req.body as z.infer<typeof serviceSchema>;
@@ -481,6 +482,46 @@ providerRouter.delete(
       entityType: 'service', entityId: req.params.id, ...ctxOf(req),
     });
     res.status(204).end();
+  }),
+);
+
+/* ---------------------------- plan & usage ------------------------------- */
+
+/**
+ * What this provider's plan allows, and how much of it is gone.
+ *
+ * Served from the same module the enforcement uses, so the number the app
+ * shows and the number the server refuses on cannot disagree. Clients read
+ * this to show "7 of 10" and to explain a limit *before* someone fills in a
+ * form that is going to be rejected.
+ *
+ * `unimplemented` is the honest part: those capabilities are granted by the
+ * plan and no endpoint consumes them yet, because the feature does not exist.
+ * Saying so here is better than an app advertising a button it cannot build.
+ */
+providerRouter.get(
+  '/entitlements',
+  asyncHandler(async (req, res) => {
+    const providerId = tenantId(req);
+    const db = await getDb();
+    const entitlements = await getEntitlements(providerId, db);
+    const usage = await getUsage(providerId, entitlements, db);
+
+    res.json({
+      plan: {
+        id: entitlements.planId,
+        code: entitlements.planCode,
+        name: entitlements.planName,
+      },
+      subscriptionStatus: entitlements.subscriptionStatus,
+      fromLiveSubscription: entitlements.fromLiveSubscription,
+      limits: entitlements.limits,
+      capabilities: entitlements.capabilities,
+      unimplemented: entitlements.capabilities.filter(
+        (c) => UNIMPLEMENTED_CAPABILITIES.includes(c),
+      ),
+      usage,
+    });
   }),
 );
 
