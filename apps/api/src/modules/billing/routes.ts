@@ -36,7 +36,35 @@ billingRouter.post(
   idempotency('billing.subscribe'),
   validate(z.object({ planCode: z.string().min(2).max(40) })),
   asyncHandler(async (req, res) => {
-    res.status(201).json(await svc.startSubscription(tenantId(req), req.auth!.userId, req.body.planCode));
+    res.status(201).json(await svc.startSubscription(
+      tenantId(req),
+      req.auth!.userId,
+      req.body.planCode,
+      // Threaded through to Stripe so its own idempotency matches this
+      // request's, rather than each call minting an unrelated key.
+      typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined,
+    ));
+  }),
+);
+
+/**
+ * A link into Stripe's Customer Portal, where the provider changes plan,
+ * updates their card or cancels.
+ *
+ * POST rather than GET: it creates a short-lived session at Stripe, and a GET
+ * that mutates something at a third party is the kind of thing a link
+ * prefetcher fires by accident.
+ */
+billingRouter.post(
+  '/portal',
+  authenticate,
+  requireProvider,
+  limiters.financial,
+  asyncHandler(async (req, res) => {
+    res.json(await svc.createBillingPortalSession(
+      tenantId(req),
+      typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined,
+    ));
   }),
 );
 

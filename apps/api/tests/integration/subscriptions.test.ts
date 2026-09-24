@@ -365,3 +365,152 @@ describe('the grace window ends', () => {
     expect(notes.body.data.some((n: any) => n.type === 'subscription.expired')).toBe(true);
   });
 });
+
+/* ========================================================================== */
+/* The renewal worker                                                         */
+/* ========================================================================== */
+
+/**
+ * `billing.renew` fires a period after a subscription activates, and what it
+ * does next depends entirely on what is behind the plan. Getting that wrong is
+ * how the free tier deleted itself from search a month after launch.
+ */
+describe('billing.renew', () => {
+  /** Runs the renewal handler directly, without waiting a month. */
+  async function renew(subscriptionId: string): Promise<void> {
+    const { HANDLERS } = await import('../../src/workers/handlers.js');
+    await HANDLERS['billing.renew']({ subscriptionId });
+  }
+
+  async function subscriptionOf(providerId: string) {
+    const conn = await db();
+    const { rows } = await conn.query<{
+      id: string; status: string; current_period_end: string | null;
+    }>(
+      `SELECT id, status, current_period_end FROM subscriptions
+        WHERE provider_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [providerId],
+    );
+    return rows[0];
+  }
+
+  async function onPlan(email: string, planCode: string) {
+    const provider = await listedProvider(email, `${planCode} Co`);
+    // Replaces whatever publishProvider gave them with the plan under test.
+    const conn = await db();
+    await conn.query(
+      `DELETE FROM subscriptions WHERE provider_id = $1`,
+      [provider.providerId],
+    );
+    await request(app)
+      .post('/api/v1/billing/subscription').set(auth(provider.token))
+      .send({ planCode }).expect(201);
+    return provider;
+  }
+
+  /**
+   * The bug: a free plan activates immediately and books this job; the job
+   * moved any active subscription to `past_due`; `billing.grace_expired` turned
+   * that into `expired` seven days later; and discovery hides `expired`. The
+   * entry tier removed itself from search on about day 37.
+   */
+  it('extends a free plan instead of sending it past_due', async () => {
+    const provider = await onPlan('renew-free-extend@test.local', 'starter');
+    const before = await subscriptionOf(provider.providerId!);
+    expect(before.status).toBe('active');
+
+    await renew(before.id);
+
+    const after = await subscriptionOf(provider.providerId!);
+    expect(after.status).toBe('active');
+    expect(new Date(after.current_period_end!).getTime())
+      .toBeGreaterThan(new Date(before.current_period_end!).getTime());
+  });
+
+  it('keeps a free provider visible in search after renewal', async () => {
+    const provider = await onPlan('renew-free-search@test.local', 'starter');
+    expect(await searchCount()).toBeGreaterThan(0);
+
+    const sub = await subscriptionOf(provider.providerId!);
+    await renew(sub.id);
+    // And drain, so a grace-expiry job booked by mistake would take effect.
+    await drainQueue();
+
+    expect(await searchCount()).toBeGreaterThan(0);
+  });
+
+  /**
+   * The dedupe key covers `pending` and `processing`, and the running job is
+   * `processing` while its handler executes — so a key of just `renew:<id>`
+   * silently drops the reschedule and the plan extends exactly once.
+   */
+  it('books the next renewal rather than colliding with the running job', async () => {
+    const provider = await onPlan('renew-free-again@test.local', 'starter');
+    const sub = await subscriptionOf(provider.providerId!);
+
+    const conn = await db();
+    // Mirror the real worker: the job is `processing` while the handler runs.
+    await conn.query(
+      `UPDATE job_queue SET status = 'processing', locked_at = now()
+        WHERE queue = 'billing.renew'`,
+    );
+
+    await renew(sub.id);
+
+    const { rows } = await conn.query<{ count: string }>(
+      `SELECT count(*)::text FROM job_queue
+        WHERE queue = 'billing.renew' AND status = 'pending'`,
+    );
+    expect(Number(rows[0].count)).toBe(1);
+  });
+
+  it('still sends a priced plan past_due when no gateway settled it', async () => {
+    const provider = await onPlan('renew-paid@test.local', 'pro');
+    const conn = await db();
+    // The manual flow leaves it pending_payment; the webhook is what activates
+    // it. Activate directly so the renewal path is what is under test.
+    const sub = await subscriptionOf(provider.providerId!);
+    await conn.query(
+      `UPDATE subscriptions SET status = 'active', current_period_end = now()
+        WHERE id = $1`,
+      [sub.id],
+    );
+
+    await renew(sub.id);
+
+    expect((await subscriptionOf(provider.providerId!)).status).toBe('past_due');
+  });
+
+  /**
+   * Stripe charges the card and runs its own retries. A second, blind dunning
+   * process here would delist a provider whose payment is still in flight.
+   */
+  it('leaves a Stripe-managed subscription alone', async () => {
+    const provider = await onPlan('renew-stripe@test.local', 'pro');
+    const conn = await db();
+    const sub = await subscriptionOf(provider.providerId!);
+    await conn.query(
+      `UPDATE subscriptions
+          SET status = 'active', stripe_subscription_id = 'sub_stripe_owned',
+              current_period_end = now()
+        WHERE id = $1`,
+      [sub.id],
+    );
+
+    await renew(sub.id);
+
+    expect((await subscriptionOf(provider.providerId!)).status).toBe('active');
+  });
+
+  it('cancels at period end when the provider asked it to', async () => {
+    const provider = await onPlan('renew-cancel@test.local', 'starter');
+    const sub = await subscriptionOf(provider.providerId!);
+
+    await request(app)
+      .delete('/api/v1/billing/subscription').set(auth(provider.token)).expect(200);
+
+    await renew(sub.id);
+
+    expect((await subscriptionOf(provider.providerId!)).status).toBe('cancelled');
+  });
+});

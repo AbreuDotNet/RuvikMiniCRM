@@ -186,6 +186,7 @@ The link printed in the footer of every quote and invoice PDF.
 | GET | `/subscription` | provider | Current plan and payment history |
 | POST | `/subscription` | provider | Returns a checkout intent; **activation is webhook-only** |
 | DELETE | `/subscription` | provider | `?immediate=true` to end now |
+| POST | `/portal` | provider | Stripe Customer Portal link — plan change, card update, cancellation. `409` when Stripe is unconfigured or the provider has never checked out |
 
 ### Account — `/account` (any role)
 
@@ -233,6 +234,7 @@ Reads need `aal1`; **every state change needs `aal=mfa`**.
 | Method | Path | Verification |
 |---|---|---|
 | POST | `/billing` | `X-Ruvik-Signature: t=<unix>,v1=<hmac>`; 5-minute window; replay-protected |
+| POST | `/stripe` | `Stripe-Signature`; 5-minute window. `403` when Stripe is unconfigured. A failed event keeps `processed_at` null so Stripe can retry it |
 | GET | `/whatsapp` | Meta subscription handshake |
 | POST | `/whatsapp` | `X-Hub-Signature-256` HMAC over the raw body |
 

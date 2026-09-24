@@ -8,7 +8,7 @@ import { getStorage } from '../lib/storage.js';
 import { sendPush } from '../lib/push.js';
 import { env } from '../config/env.js';
 import type { QueueName } from '../lib/queue.js';
-import { GRACE_DAYS, scheduleGraceExpiry } from '../modules/billing/service.js';
+import { GRACE_DAYS, scheduleGraceExpiry, scheduleRenewal } from '../modules/billing/service.js';
 import { OVERDUE_CANDIDATE_STATUSES, sqlIn } from '../lib/invoiceStatus.js';
 
 export type JobHandler = (payload: Record<string, any>) => Promise<void>;
@@ -262,7 +262,9 @@ async function sendEmail(payload: Record<string, any>): Promise<void> {
 async function renewSubscription(payload: Record<string, any>): Promise<void> {
   const db = await getDb();
   const { rows } = await db.query<any>(
-    `SELECT s.id, s.status, s.cancel_at_period_end, s.current_period_end, p.user_id, sp.name
+    `SELECT s.id, s.status, s.cancel_at_period_end, s.current_period_end,
+            s.stripe_subscription_id,
+            p.user_id, sp.name, sp.price_cents, sp.interval
        FROM subscriptions s
        JOIN providers p ON p.id = s.provider_id
        JOIN subscription_plans sp ON sp.id = s.plan_id
@@ -271,6 +273,27 @@ async function renewSubscription(payload: Record<string, any>): Promise<void> {
   );
   const sub = rows[0];
   if (!sub || sub.status !== 'active') return;
+
+  /*
+   * Stripe owns the renewal lifecycle for anything it manages.
+   *
+   * It charges the card, runs its own retry schedule, and tells us the outcome
+   * through `invoice.paid`, `invoice.payment_failed` and
+   * `customer.subscription.updated`. This job marking the same subscription
+   * `past_due` would be a second, blind dunning process fighting the first —
+   * delisting a provider whose payment Stripe is still retrying.
+   *
+   * A Stripe checkout never books one of these jobs, so this only catches a
+   * subscription that started on the free or manual flow and later moved to
+   * Stripe, leaving an old job queued behind it.
+   */
+  if (sub.stripe_subscription_id) {
+    logger.info(
+      { subscriptionId: sub.id },
+      'renewal skipped: Stripe manages this subscription',
+    );
+    return;
+  }
 
   if (sub.cancel_at_period_end) {
     await db.query(
@@ -286,8 +309,51 @@ async function renewSubscription(payload: Record<string, any>): Promise<void> {
     return;
   }
 
-  // A real gateway charge would go here; until it confirms, the subscription
-  // moves to past_due rather than silently extending.
+  /*
+   * A free plan renews itself, because there is nothing to charge.
+   *
+   * Without this, every Starter provider was delisted a month after signing up:
+   * the free plan activates immediately and books this job, the job moved any
+   * active subscription to `past_due`, and `billing.grace_expired` turned that
+   * into `expired` seven days later. `LIVE_SUBSCRIPTION` in discovery excludes
+   * `expired`, so the entry tier — the one that exists to attract supply —
+   * quietly removed itself from search on day 37.
+   *
+   * The period extends from where the last one ended rather than from now, so a
+   * job that runs late does not shorten the next period or leave one that
+   * already expired. `GREATEST` covers the case where it ran very late.
+   */
+  if (sub.price_cents === 0) {
+    const { rows: extended } = await db.query<{ current_period_end: string }>(
+      `UPDATE subscriptions
+          SET current_period_start = GREATEST(COALESCE(current_period_end, now()), now()),
+              current_period_end = GREATEST(COALESCE(current_period_end, now()), now())
+                                   + $2::interval,
+              updated_at = now()
+        WHERE id = $1
+        RETURNING current_period_end`,
+      [sub.id, sub.interval === 'year' ? '1 year' : '1 month'],
+    );
+
+    // Books the next one *at the new period end*, not a period from now. Two
+    // reasons: it is the moment the renewal is actually due, and it keeps the
+    // dedupe key clear of the job currently running — which is `processing`
+    // until this handler returns, and would otherwise swallow the insert.
+    //
+    // Silent on purpose: a monthly "your free plan renewed" notification is
+    // noise about something the provider never has to act on.
+    await scheduleRenewal(
+      db,
+      sub.id,
+      sub.interval,
+      new Date(extended[0].current_period_end),
+    );
+    logger.info({ subscriptionId: sub.id }, 'free plan period extended');
+    return;
+  }
+
+  // A priced plan with no gateway behind it. Nothing can be charged, so the
+  // subscription moves to past_due rather than silently extending.
   await db.query(
     `UPDATE subscriptions SET status = 'past_due', updated_at = now() WHERE id = $1`,
     [sub.id],

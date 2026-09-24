@@ -44,6 +44,8 @@ export async function createCheckoutSession(input: {
   const body: Record<string, unknown> = {
     mode: 'subscription',
     client_reference_id: input.providerId,
+    // Tags the flow in the dashboard. Required from 2026-03-25.dahlia on.
+    integration_identifier: stripeConfig.integrationIdentifier,
     line_items: [{ price: input.priceId, quantity: 1 }],
     success_url: `${stripeConfig.returnUrl}?checkout=done`,
     cancel_url: `${stripeConfig.returnUrl}?checkout=cancelled`,

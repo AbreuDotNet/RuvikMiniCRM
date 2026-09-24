@@ -5,6 +5,17 @@ import { enqueue } from '../../lib/queue.js';
 import { notify } from '../notifications/service.js';
 import { randomToken } from '../../lib/crypto.js';
 import { UNIMPLEMENTED_CAPABILITIES, type Capability } from './entitlements.js';
+/*
+ * The leaf modules, not the `stripe/index.js` barrel.
+ *
+ * The barrel re-exports `sync.js`, which imports this file for `GRACE_DAYS` and
+ * `scheduleGraceExpiry` — so importing the barrel here would close a cycle
+ * (service → index → sync → service). `config` and `checkout` depend on
+ * neither, so reaching for them directly keeps the graph acyclic instead of
+ * relying on ESM to tolerate it.
+ */
+import { isStripeConfigured } from './stripe/config.js';
+import { createCheckoutSession, createPortalSession } from './stripe/checkout.js';
 
 /**
  * Days a provider keeps their listing after a charge fails.
@@ -18,11 +29,37 @@ export const GRACE_DAYS = 7;
 const periodInterval = (interval: string) => (interval === 'year' ? '1 year' : '1 month');
 const periodDays = (interval: string) => (interval === 'year' ? 365 : 30);
 
-/** Books the renewal check just after the period ends. */
-async function scheduleRenewal(c: Queryable, subscriptionId: string, interval: string) {
+/**
+ * Books the renewal check just after the period ends.
+ *
+ * The dedupe key carries the run date, and that detail is load-bearing. The
+ * dedupe index covers `pending` **and** `processing`, and `completeJob` only
+ * marks a job done *after* its handler returns — so a handler that reschedules
+ * itself under a bare `renew:<id>` collides with the very job that is running
+ * and the insert is silently dropped. A free plan would extend its period
+ * exactly once and then never again.
+ *
+ * Scoping the key to the date keeps the property that mattered — two calls for
+ * the same subscription and the same period cannot stack — while letting the
+ * renewal handler book the next one.
+ */
+export async function scheduleRenewal(
+  c: Queryable,
+  subscriptionId: string,
+  interval: string,
+  /**
+   * When to run, for a caller that already knows. The renewal handler passes
+   * the period end it just wrote: anchoring to that rather than to `now()` is
+   * both the correct moment and what guarantees a key distinct from the job
+   * currently running, which would otherwise swallow the reschedule.
+   */
+  runAtOverride?: Date,
+) {
+  const runAt = runAtOverride
+    ?? new Date(Date.now() + periodDays(interval) * 86_400_000);
   await enqueue('billing.renew', { subscriptionId }, {
-    runAt: new Date(Date.now() + periodDays(interval) * 86_400_000),
-    dedupeKey: `renew:${subscriptionId}`,
+    runAt,
+    dedupeKey: `renew:${subscriptionId}:${runAt.toISOString().slice(0, 10)}`,
   }, c);
 }
 
@@ -154,12 +191,19 @@ export async function startSubscription(
   providerId: string,
   actorUserId: string,
   planCode: string,
+  /**
+   * The request's `Idempotency-Key`, threaded through to Stripe so a
+   * double-tap on a slow connection produces one Checkout Session rather than
+   * two. Falls back to a fresh token when the client sent none.
+   */
+  idempotencyKey?: string,
 ) {
   const db = await getDb();
 
   return db.tx(async (c) => {
     const { rows: planRows } = await c.query<any>(
-      'SELECT id, code, name, price_cents, currency, interval, trial_days FROM subscription_plans WHERE code = $1 AND is_active = true',
+      `SELECT id, code, name, price_cents, currency, interval, trial_days, stripe_price_id
+         FROM subscription_plans WHERE code = $1 AND is_active = true`,
       [planCode],
     );
     const plan = planRows[0];
@@ -206,6 +250,61 @@ export async function startSubscription(
         status: 'active' as const,
         plan: planSummary,
         checkout: null,
+      };
+    }
+
+    /*
+     * Stripe Checkout, when there are credentials and the plan has a price in
+     * Stripe to sell.
+     *
+     * The local row is still written as `pending_payment`, so a provider who
+     * abandons checkout leaves a trace and the next attempt replaces it rather
+     * than colliding with the one-live-subscription index. Nothing is
+     * activated here: `checkout.session.completed` is what fills in the Stripe
+     * ids and moves the status, which keeps the rule that only a signed
+     * webhook can grant a paid plan.
+     *
+     * No Stripe customer is created up front. Checkout makes one from the
+     * email, and `linkSubscription` writes the id back — one fewer API call,
+     * and one fewer thing to leave orphaned if the provider never pays.
+     */
+    if (isStripeConfigured() && plan.stripe_price_id) {
+      const { rows: ownerRows } = await c.query<{ email: string; stripe_customer_id: string | null }>(
+        `SELECT u.email, p.stripe_customer_id
+           FROM providers p JOIN users u ON u.id = p.user_id
+          WHERE p.id = $1`,
+        [providerId],
+      );
+      const owner = ownerRows[0];
+
+      const { rows: pending } = await c.query<{ id: string }>(
+        `INSERT INTO subscriptions (provider_id, plan_id, status)
+         VALUES ($1,$2,'pending_payment') RETURNING id`,
+        [providerId, plan.id],
+      );
+
+      const session = await createCheckoutSession({
+        providerId,
+        priceId: plan.stripe_price_id,
+        customerId: owner?.stripe_customer_id ?? null,
+        email: owner?.email ?? null,
+        trialDays: plan.trial_days > 0 ? plan.trial_days : null,
+        idempotencyKey: idempotencyKey ?? `checkout_${randomToken(16)}`,
+      });
+
+      await writeAudit({
+        actorUserId, actorRole: 'provider', action: 'subscription.checkout_started',
+        entityType: 'subscription', entityId: pending[0].id,
+        metadata: { plan: plan.code, priceCents: plan.price_cents, gateway: 'stripe' },
+      }, c);
+
+      return {
+        subscriptionId: pending[0].id,
+        status: 'pending_payment' as const,
+        plan: planSummary,
+        // The client sends the provider here. Nothing is granted until the
+        // webhook confirms.
+        checkout: { url: session.url, sessionId: session.id },
       };
     }
 
@@ -331,6 +430,45 @@ export async function markPaymentFailed(externalRef: string, reason: string) {
       entityType: 'subscription', entityId: rows[0].id,
       metadata: { externalRef, reason, graceDays: GRACE_DAYS },
     }, c);
+  });
+}
+
+/**
+ * Opens Stripe's Customer Portal.
+ *
+ * This is what closes three gaps at once — plan changes with proration, a
+ * stored card the provider can update, and a cancellation flow — without
+ * building any of them. Stripe applies the change and tells us through
+ * `customer.subscription.updated`, which `sync.ts` already handles, so nothing
+ * here has to interpret the outcome.
+ *
+ * The subscription screen currently says "Switching without a gap is not
+ * available yet". Once a deployment has Stripe credentials, this is the answer
+ * to that.
+ */
+export async function createBillingPortalSession(
+  providerId: string,
+  idempotencyKey?: string,
+): Promise<{ url: string }> {
+  if (!isStripeConfigured()) {
+    throw conflict('Self-service billing management is not enabled on this deployment.');
+  }
+
+  const db = await getDb();
+  const { rows } = await db.query<{ stripe_customer_id: string | null }>(
+    'SELECT stripe_customer_id FROM providers WHERE id = $1',
+    [providerId],
+  );
+  const customerId = rows[0]?.stripe_customer_id;
+  // No Stripe customer means they have never completed a checkout, so there is
+  // nothing for the portal to manage. A clearer answer than Stripe's 400.
+  if (!customerId) {
+    throw conflict('Choose a plan first — there is no billing history to manage yet.');
+  }
+
+  return createPortalSession({
+    customerId,
+    idempotencyKey: idempotencyKey ?? `portal_${randomToken(16)}`,
   });
 }
 

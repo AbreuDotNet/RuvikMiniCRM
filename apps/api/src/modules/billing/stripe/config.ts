@@ -15,10 +15,18 @@ export const stripeConfig = {
    * integration changes behaviour on their schedule rather than ours.
    * Raise it deliberately, with the changelog open.
    */
-  apiVersion: '2025-08-27.basil',
+  apiVersion: '2026-08-26.dahlia',
   apiBase: 'https://api.stripe.com/v1',
   /** Where Checkout and the Billing Portal send the provider back to. */
   returnUrl: `${env.WEB_BASE_URL}/subscription`,
+  /**
+   * Labels this checkout flow in the Stripe dashboard, so its conversion can
+   * be compared against any other flow added later. Required from API version
+   * 2026-03-25.dahlia onwards, and the trailing eight letters are the random
+   * suffix Stripe asks for — fixed rather than generated per request, because
+   * a label that changes every call groups nothing.
+   */
+  integrationIdentifier: 'ruvik_subscription_qhzmvkbt',
 } as const;
 
 /** True once both the API key and the webhook secret are present. */

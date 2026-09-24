@@ -103,7 +103,20 @@ const schema = z.object({
    * the repository unconfigured, reports that it is not set up, and the manual
    * billing flow keeps working. Nothing here is required to boot.
    */
-  STRIPE_SECRET_KEY: z.string().startsWith('sk_').optional(),
+  /**
+   * A restricted key (`rk_`) or a secret key (`sk_`).
+   *
+   * `rk_` is listed first because it is what Stripe recommends: a restricted
+   * key is scoped to the handful of resources this integration touches, so a
+   * leak cannot be used to read the whole account. The previous schema
+   * validated `startsWith('sk_')`, which rejected exactly the key Stripe tells
+   * you to use — and the failure arrived at boot as "invalid environment
+   * configuration", naming the variable but not the reason.
+   */
+  STRIPE_SECRET_KEY: z
+    .string()
+    .regex(/^(rk|sk)_/, 'Use a restricted key (rk_…, preferred) or a secret key (sk_…).')
+    .optional(),
   /** The signing secret of the webhook endpoint, not the API key. */
   STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_').optional(),
 

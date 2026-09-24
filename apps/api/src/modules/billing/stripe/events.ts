@@ -36,6 +36,15 @@ export const HANDLED_EVENTS: Readonly<Record<string, StripeIntent>> = {
   // provider. Everything after it is keyed on those ids.
   'checkout.session.completed': 'link_subscription',
 
+  /*
+   * Some payment methods do not settle while the customer is still on the
+   * page. For those, `completed` arrives with `payment_status: 'unpaid'` and
+   * the money lands later under this event — so an integration that handles
+   * only `completed` never activates them. Both are gated on `payment_status`
+   * in the handler, which is why they can share an intent.
+   */
+  'checkout.session.async_payment_succeeded': 'link_subscription',
+
   'customer.subscription.created': 'sync_subscription',
   'customer.subscription.updated': 'sync_subscription',
   'customer.subscription.paused': 'sync_subscription',

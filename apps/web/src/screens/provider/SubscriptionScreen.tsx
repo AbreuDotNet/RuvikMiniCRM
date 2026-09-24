@@ -70,9 +70,24 @@ export function SubscriptionScreen() {
       const result = await api.post<{
         subscriptionId: string;
         status: string;
-        /** Null on a free plan: there is nothing to pay, so it is already live. */
-        checkout: { reference: string; amountCents: number; currency: string } | null;
+        /**
+         * Null on a free plan: there is nothing to pay, so it is already live.
+         * With Stripe configured it carries a hosted `url` to send the provider
+         * to; the manual flow carries a `reference` and an amount instead.
+         */
+        checkout:
+          | { url: string; sessionId: string }
+          | { reference: string; amountCents: number; currency: string }
+          | null;
       }>('/billing/subscription', { planCode }, newIdempotencyKey());
+
+      // A hosted checkout: hand the browser over. Nothing is activated here —
+      // the signed webhook is still the only thing that grants the plan, so
+      // coming back from Stripe proves nothing on its own.
+      if (result.checkout && 'url' in result.checkout) {
+        window.location.assign(result.checkout.url);
+        return;
+      }
 
       notify(
         result.checkout
@@ -86,6 +101,27 @@ export function SubscriptionScreen() {
     } catch (err) {
       notify(err instanceof ApiError ? err.message : 'We could not start checkout.', 'error');
     } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Hands the provider to Stripe's Customer Portal.
+   *
+   * Only offered when the server says it is available — a 409 comes back for a
+   * deployment with no Stripe credentials, or a provider who has never checked
+   * out and so has nothing to manage.
+   */
+  const manageBilling = async () => {
+    setBusy('portal');
+    try {
+      const { url } = await api.post<{ url: string }>('/billing/portal', {});
+      window.location.assign(url);
+    } catch (err) {
+      notify(
+        err instanceof ApiError ? err.message : 'We could not open billing management.',
+        'error',
+      );
       setBusy(null);
     }
   };
@@ -216,14 +252,21 @@ export function SubscriptionScreen() {
 
                   {!isCurrent && (
                     <div className="mt-4">
-                      {/* Changing plan mid-subscription is not built yet, and
-                          the server refuses it. Offering a button that always
-                          errors is worse than saying so. */}
+                      {/* Switching plan is Stripe's Customer Portal, which
+                          handles proration. The portal refuses with a 409 on a
+                          deployment with no Stripe credentials, and the message
+                          it returns is what gets shown — better than a button
+                          that always errors, and better than the flat "not
+                          available yet" this used to say. */}
                       {sub?.status === 'active' ? (
-                        <p className="tiny subtle" style={{ margin: 0 }}>
-                          Cancel your current plan to move to this one. Switching without a
-                          gap is not available yet.
-                        </p>
+                        <Button
+                          block
+                          variant="secondary"
+                          loading={busy === 'portal'}
+                          onClick={manageBilling}
+                        >
+                          Switch to this plan
+                        </Button>
                       ) : (
                         <Button
                           block

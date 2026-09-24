@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
+    "stripe:sync-plans": "tsx src/scripts/stripeSyncPlans.ts",
     "worker": "tsx src/workers/runner.ts",
     "test": "vitest run",
     "test:watch": "vitest",
