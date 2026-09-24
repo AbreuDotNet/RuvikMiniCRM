@@ -528,6 +528,12 @@ export interface Plan {
   interval: string;
   maxServices: number | null;
   features: string[];
+  /**
+   * Capabilities this plan grants with no code behind them yet, named by the
+   * server from the one list that knows. Every `feature` line renders with a
+   * tick, and a tick beside something the product cannot do is a claim.
+   */
+  unimplemented?: string[];
 }
 
 export interface Subscription {

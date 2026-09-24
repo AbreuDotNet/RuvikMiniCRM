@@ -24,6 +24,7 @@ import { notificationsRouter } from './modules/notifications/routes.js';
 import { filesRouter } from './modules/files/routes.js';
 import { accountRouter } from './modules/account/routes.js';
 import { adminRouter } from './modules/admin/routes.js';
+import { verifyRouter } from './modules/verify/routes.js';
 import { webhooksRouter } from './modules/webhooks/routes.js';
 
 export function createApp(): Express {
@@ -158,6 +159,7 @@ export function createApp(): Express {
 
   v1.use('/auth', authRouter);
   v1.use('/', discoveryRouter);            // public search, categories, profiles
+  v1.use('/verify', verifyRouter);         // public: confirm a document a recipient holds
   v1.use('/billing', billingRouter);       // plans are public; the rest is guarded
   v1.use('/provider', providerRouter);
   v1.use('/provider', crmRouter);          // clients, jobs, calendar

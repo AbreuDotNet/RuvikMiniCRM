@@ -96,6 +96,76 @@ accountRouter.patch(
   }),
 );
 
+/* ------------------------------ push devices ------------------------------ */
+
+/**
+ * Where a device token goes.
+ *
+ * There is no consent flag here, deliberately. Push consent *is* the operating
+ * system's permission prompt: no token exists unless the person granted it, and
+ * revoking it in Settings stops delivery whatever this table says. A second
+ * in-app toggle would be a promise the OS has already made and can already
+ * break, and the WhatsApp consent log exists because that channel is regulated
+ * in a way this one is not.
+ */
+const deviceSchema = z.object({
+  token: z.string().trim().min(10).max(256),
+  platform: z.enum(['ios', 'android', 'web']),
+});
+
+/**
+ * PUT, not POST: registering the same handset twice is the normal case — it
+ * happens on every cold start — and must be idempotent rather than accumulate
+ * rows.
+ *
+ * `ON CONFLICT (token) DO UPDATE SET user_id` is what moves a token between
+ * accounts. Two people sharing a handset is rare; one person signing out of a
+ * test account and into their real one is not, and without the reassignment
+ * their leads would keep ringing under the wrong user id.
+ */
+accountRouter.put(
+  '/devices',
+  limiters.write,
+  validate(deviceSchema),
+  asyncHandler(async (req, res) => {
+    const { token, platform } = req.body as z.infer<typeof deviceSchema>;
+    const db = await getDb();
+    await db.query(
+      `INSERT INTO device_tokens (user_id, token, platform)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (token) DO UPDATE
+         SET user_id = EXCLUDED.user_id,
+             platform = EXCLUDED.platform,
+             failure_count = 0,
+             last_seen_at = now()`,
+      [req.auth!.userId, token, platform],
+    );
+    res.json({ message: 'Device registered for notifications.' });
+  }),
+);
+
+/**
+ * Called on sign-out, so a shared or returned handset stops receiving the
+ * previous user's work.
+ *
+ * Scoped to the caller's own rows: presenting someone else's token must not
+ * unregister their device. A token that is not theirs simply matches nothing,
+ * and the response is the same either way — there is nothing to disclose.
+ */
+accountRouter.delete(
+  '/devices',
+  limiters.write,
+  validate(deviceSchema.pick({ token: true })),
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    await db.query('DELETE FROM device_tokens WHERE token = $1 AND user_id = $2', [
+      req.body.token,
+      req.auth!.userId,
+    ]);
+    res.json({ message: 'Device unregistered.' });
+  }),
+);
+
 /* --------------------------- WhatsApp consent ----------------------------- */
 
 accountRouter.get(

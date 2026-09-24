@@ -5,6 +5,7 @@ import { storeFile } from '../modules/files/service.js';
 import { dispatch, type TemplateKey } from '../modules/whatsapp/service.js';
 import { notify } from '../modules/notifications/service.js';
 import { getStorage } from '../lib/storage.js';
+import { sendPush } from '../lib/push.js';
 import { env } from '../config/env.js';
 import type { QueueName } from '../lib/queue.js';
 import { GRACE_DAYS, scheduleGraceExpiry } from '../modules/billing/service.js';
@@ -159,6 +160,91 @@ async function sendWhatsapp(payload: Record<string, any>): Promise<void> {
     // Permanent failure: the in-app notification already delivered the news.
     logger.warn({ userId: payload.userId, error: outcome.error }, 'whatsapp permanently failed');
   }
+}
+
+/* --------------------------- push notifications --------------------------- */
+
+/**
+ * Delivers one notification to every handset the recipient has registered.
+ *
+ * Three things happen here that are easy to leave out and expensive to leave
+ * out:
+ *
+ *   * **A suspended or deleted account is not notified.** The token outlives
+ *     the suspension, and `authenticate` only stops them *using* the app — it
+ *     cannot stop a push that was already on its way. Checked here because
+ *     this is the last point that knows.
+ *   * **The badge carries the real unread count**, read at send time rather
+ *     than passed in by the caller. A count computed when the notification was
+ *     created is already stale by the time it reaches the device.
+ *   * **Dead tokens are pruned.** Expo reports an uninstalled app as
+ *     `DeviceNotRegistered`, and their guidance is to stop sending to it;
+ *     keeping it would cost a slot in every future batch for ever.
+ */
+async function sendPushNotification(payload: Record<string, any>): Promise<void> {
+  const db = await getDb();
+  const userId = String(payload.userId);
+
+  const { rows: recipient } = await db.query<{ status: string; deleted_at: string | null }>(
+    'SELECT status, deleted_at FROM users WHERE id = $1',
+    [userId],
+  );
+  if (!recipient[0] || recipient[0].deleted_at || recipient[0].status !== 'active') {
+    logger.info({ userId }, 'push skipped: recipient is not active');
+    return;
+  }
+
+  const { rows: devices } = await db.query<{ token: string }>(
+    'SELECT token FROM device_tokens WHERE user_id = $1',
+    [userId],
+  );
+  // No devices is the common case for web-only users, and is not a failure.
+  if (!devices.length) return;
+
+  const { rows: unread } = await db.query<{ count: string }>(
+    'SELECT count(*)::text FROM notifications WHERE user_id = $1 AND read_at IS NULL',
+    [userId],
+  );
+  const badge = Number(unread[0]?.count ?? 0);
+
+  const outcomes = await sendPush(
+    devices.map((d) => ({
+      token: d.token,
+      title: String(payload.title),
+      body: String(payload.body),
+      data: (payload.data ?? {}) as Record<string, unknown>,
+      badge,
+    })),
+  );
+
+  const dead = outcomes
+    .filter((o) => o.status === 'unregistered' || o.status === 'error')
+    .map((o) => o.token);
+
+  if (dead.length) {
+    // An 'unregistered' token is gone for good and is removed outright. A soft
+    // error only counts against the token, and the row is dropped once it has
+    // failed enough times to be worth nothing.
+    const unregistered = outcomes.filter((o) => o.status === 'unregistered').map((o) => o.token);
+    if (unregistered.length) {
+      await db.query('DELETE FROM device_tokens WHERE token = ANY($1::text[])', [unregistered]);
+    }
+    const soft = outcomes.filter((o) => o.status === 'error').map((o) => o.token);
+    if (soft.length) {
+      await db.query(
+        `UPDATE device_tokens SET failure_count = failure_count + 1 WHERE token = ANY($1::text[])`,
+        [soft],
+      );
+      await db.query('DELETE FROM device_tokens WHERE failure_count >= 10');
+    }
+    logger.warn({ userId, dead: dead.length }, 'push tokens failed');
+  }
+
+  const delivered = outcomes.filter((o) => o.status === 'ok').length;
+  if (delivered) {
+    await db.query('UPDATE device_tokens SET last_seen_at = now() WHERE user_id = $1', [userId]);
+  }
+  logger.info({ userId, delivered, failed: dead.length }, 'push dispatched');
 }
 
 /* ------------------------------ email (stub) ------------------------------ */
@@ -324,7 +410,7 @@ export const HANDLERS: Record<QueueName, JobHandler> = {
   'pdf.generate': generatePdf,
   'whatsapp.send': sendWhatsapp,
   'email.send': sendEmail,
-  'notification.push': async () => undefined,
+  'notification.push': sendPushNotification,
   'billing.renew': renewSubscription,
   'billing.grace_expired': expireGrace,
   'invoice.overdue': flagOverdueInvoices,

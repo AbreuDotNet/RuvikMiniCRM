@@ -37,6 +37,7 @@ import {
   AdminReviewsScreen, AdminAuditScreen,
 } from './screens/admin/AdminScreens';
 import { AdminPlansScreen } from './screens/admin/AdminPlansScreen';
+import { VerifyScreen } from './screens/public/VerifyScreen';
 
 import './styles/theme.css';
 import './styles/app.css';
@@ -157,6 +158,11 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/signin" element={<SignInRoute />} />
+
+      {/* Public on purpose: the footer of every quote and invoice PDF points
+          here, and the person checking a document is a customer holding paper,
+          not necessarily someone with an account. */}
+      <Route path="/verify/:kind/:id" element={<VerifyScreen />} />
 
       {/* -------------------------------------------------------- customer */}
       <Route path="/home" element={<Protected roles={['customer']}><CustomerHomeScreen /></Protected>} />

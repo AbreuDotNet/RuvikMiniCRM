@@ -256,8 +256,18 @@ export class ApiClient {
     return this.request<T>(path, { method: 'PATCH', body });
   }
 
-  del<T>(path: string, query?: Record<string, QueryValue>) {
-    return this.request<T>(path, { method: 'DELETE', query });
+  /** For the writes that are idempotent by nature, like registering a device. */
+  put<T>(path: string, body?: unknown) {
+    return this.request<T>(path, { method: 'PUT', body });
+  }
+
+  /**
+   * `query` stays second so existing callers are untouched; `body` is there
+   * because some things worth deleting are worth keeping out of an access log.
+   * A push token in a query string is written down by every proxy on the way.
+   */
+  del<T>(path: string, query?: Record<string, QueryValue>, body?: unknown) {
+    return this.request<T>(path, { method: 'DELETE', query, body });
   }
 }
 

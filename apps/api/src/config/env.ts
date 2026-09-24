@@ -84,6 +84,21 @@ const schema = z.object({
   BILLING_WEBHOOK_SECRET: z.string().optional(),
 
   /**
+   * Push notifications, through Expo.
+   *
+   * Default **true**, unlike WhatsApp: Expo push needs no account and no
+   * credentials, so there is nothing to set up and defaulting to off would
+   * only reproduce the gap this replaced — a device token obtained on every
+   * launch and thrown away. Set it false to run the whole path in simulation.
+   */
+  PUSH_ENABLED: booleanish.default(true),
+  /**
+   * Only needed by projects that have turned on Expo's enhanced security for
+   * push. Absent, sends are unauthenticated, which is Expo's default.
+   */
+  EXPO_ACCESS_TOKEN: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+
+  /**
    * Stripe. All optional: the integration in modules/billing/stripe sits in
    * the repository unconfigured, reports that it is not set up, and the manual
    * billing flow keeps working. Nothing here is required to boot.

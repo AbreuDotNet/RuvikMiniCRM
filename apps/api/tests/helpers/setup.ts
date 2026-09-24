@@ -11,6 +11,13 @@ process.env.WHATSAPP_APP_SECRET = 'test-whatsapp-app-secret';
 process.env.WHATSAPP_VERIFY_TOKEN = 'test-verify-token';
 process.env.STORAGE_DIR = '.data/test-storage';
 /**
+ * Push runs in simulation across the suite, exactly like WhatsApp: the whole
+ * path — registration, token lookup, badge count, pruning — is exercised
+ * without a single request leaving the machine. The cases that need to see a
+ * real Expo reply stub `fetch` and flip this themselves.
+ */
+process.env.PUSH_ENABLED = 'false';
+/**
  * The suite tests the production posture, not the developer's .env.
  *
  * ADMIN_MFA_REQUIRED can be turned off locally so the demo admin can use the
@@ -37,7 +44,7 @@ export async function resetDatabase(): Promise<void> {
   const db = await getDb();
   await db.exec(`
     TRUNCATE TABLE
-      audit_logs, job_queue, dead_letters, webhook_events, idempotency_keys,
+      audit_logs, job_queue, dead_letters, webhook_events, idempotency_keys, device_tokens,
       whatsapp_messages, whatsapp_consents, notifications, support_tickets,
       provider_status_events, reviews, payments, subscriptions, invoice_items, invoices,
       quote_items, quotes, job_notes, job_status_events, jobs, clients,

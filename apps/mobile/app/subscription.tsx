@@ -10,7 +10,7 @@ import {
   useCancelSubscription, usePlans, useStartSubscription, useSubscription,
 } from '../src/features/billing/hooks';
 import { PlanUsage } from '../src/features/billing/PlanUsage';
-import { useEntitlements } from '../src/features/billing/usage';
+import { CAPABILITY_LABELS, useEntitlements, type Capability } from '../src/features/billing/usage';
 import { openInAppBrowser } from '../src/services/files';
 import { errorMessage } from '../src/services/api';
 import { useAuth } from '../src/state/auth';
@@ -198,6 +198,18 @@ function SubscriptionScreen() {
                     {plan.features.map((feature) => (
                       <Text key={feature} variant="caption" tone="muted">• {feature}</Text>
                     ))}
+                    {/* Named by the server from the one list that knows which
+                        capabilities have code behind them, so an edit to the
+                        plan copy in the admin panel cannot re-assert one. */}
+                    {plan.unimplemented?.length ? (
+                      <Text variant="caption" tone="faint">
+                        Not built yet:{' '}
+                        {plan.unimplemented
+                          .map((c) => CAPABILITY_LABELS[c as Capability] ?? c.replace(/_/g, ' '))
+                          .join(', ')}
+                        .
+                      </Text>
+                    ) : null}
                   </Stack>
 
                   {!isCurrent ? (

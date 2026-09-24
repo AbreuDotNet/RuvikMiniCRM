@@ -5,6 +5,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 
 import { api, setSessionLostHandler } from '../services/api';
+import { unregisterDeviceToken } from '../services/push';
 import type { AuthUser, MeResponse, Role, SessionResponse } from '../types/api';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
@@ -132,6 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
+      // Before the token is dropped, while the request can still authenticate:
+      // afterwards there is no session to unregister with, and the handset
+      // would keep ringing for work that is no longer this person's.
+      await unregisterDeviceToken();
       // Sent with the refresh token so the server revokes that family too —
       // dropping it locally alone would leave a live 30-day credential.
       const refreshToken = await api.peekRefreshToken();

@@ -407,3 +407,93 @@ describe('admin plan management', () => {
     expect(entry.metadata).toMatchObject({ priceBefore: 1000, priceAfter: 1999 });
   });
 });
+
+/* ========================================================================== */
+/* What the pricing screen is allowed to claim                                */
+/* ========================================================================== */
+
+describe('the public plan catalogue', () => {
+  /**
+   * Every `feature` string renders with a tick on both pricing screens, so a
+   * plan granting a capability with no code behind it would tick a feature the
+   * product cannot deliver. Derived from `UNIMPLEMENTED_CAPABILITIES` rather
+   * than from the catalogue, so editing a plan in the admin panel cannot
+   * re-assert one.
+   */
+  it('names the capabilities a plan grants but cannot yet deliver', async () => {
+    await makePlan({
+      code: 'claims',
+      capabilities: ['priority_support', 'fiscal_reports', 'team_members'],
+    });
+
+    const res = await request(app).get('/api/v1/billing/plans').expect(200);
+    const plan = res.body.data.find((p: { code: string }) => p.code === 'claims');
+
+    expect(plan.unimplemented).toEqual(
+      expect.arrayContaining(['fiscal_reports', 'team_members']),
+    );
+    // Priority support is operational rather than a code path, so it is real.
+    expect(plan.unimplemented).not.toContain('priority_support');
+  });
+
+  it('reports nothing unbuilt for a plan that only grants what exists', async () => {
+    await makePlan({ code: 'honest', capabilities: ['priority_support'] });
+
+    const res = await request(app).get('/api/v1/billing/plans').expect(200);
+    const plan = res.body.data.find((p: { code: string }) => p.code === 'honest');
+
+    expect(plan.unimplemented).toEqual([]);
+  });
+
+  /** The shipped catalogue is what a real customer would be charged against. */
+  it('does not let the seeded plans tick an unbuilt feature', async () => {
+    const { seed } = await import('../../src/db/seed.js');
+    await seed();
+
+    /*
+     * The seed refreshes a plan's whole definition except `is_active` — it
+     * will not resurrect a tier an admin deliberately retired — and an earlier
+     * case in this file retires everything but Starter. Re-activating the
+     * three here keeps this test about the shipped copy rather than about
+     * whichever order the suite happened to run in.
+     */
+    const { getDb } = await import('../../src/db/index.js');
+    const conn = await getDb();
+    await conn.query(
+      `UPDATE subscription_plans SET is_active = true
+        WHERE code = ANY(ARRAY['starter','pro','business'])`,
+    );
+
+    const res = await request(app).get('/api/v1/billing/plans').expect(200);
+
+    /*
+     * Only the shipped catalogue. `resetDatabase` truncates the tenant tables
+     * and leaves `subscription_plans` standing — that is what makes `makePlan`
+     * an upsert — so the throwaway plans other cases in this file created are
+     * still listed here, and they have no copy to hedge.
+     */
+    const shipped = (res.body.data as Array<{
+      code: string; features: string[]; unimplemented: string[];
+    }>).filter((p) => ['starter', 'pro', 'business'].includes(p.code));
+
+    expect(shipped).toHaveLength(3);
+
+    for (const plan of shipped) {
+      /*
+       * A plan that grants something unbuilt has to say so in the copy, not
+       * only in the `unimplemented` field: the field is what a screen reads,
+       * the copy is what a person reads.
+       *
+       * Deliberately "at least one hedge" rather than one per capability.
+       * Matching hedges to capabilities means parsing prose — "Everything in
+       * Pro" carries Pro's two unbuilt entitlements without naming either —
+       * and a count that happens to line up today would fail the next time
+       * somebody rewords a bullet, which is not a defect worth failing a build
+       * over. The precise guarantee is the field, and it is asserted above.
+       */
+      if (plan.unimplemented.length > 0) {
+        expect(plan.features.some((f) => /coming soon/i.test(f))).toBe(true);
+      }
+    }
+  });
+});

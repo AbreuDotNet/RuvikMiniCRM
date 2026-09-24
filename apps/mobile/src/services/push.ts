@@ -2,20 +2,20 @@ import { Platform } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Device from 'expo-device';
 
+import { api } from './api';
+
 /**
  * Push notifications.
  *
- * The device half is real: permission, the Android channel, the Expo push
- * token, and the tap handler that routes into the app.
+ * Both halves are real now. The device half — permission, the Android channel,
+ * the Expo push token, the tap handler that routes into the app — has worked
+ * since the app shipped. The server half landed with `PUT /account/devices`
+ * and the `notification.push` worker, so a token obtained here is stored
+ * against the signed-in user and every in-app notification is also delivered
+ * to the handset.
  *
- * The server half does not exist yet. There is no endpoint on the Ruvik API
- * that stores a device token, so `registerDeviceToken` deliberately does not
- * call one — inventing a route here would produce a 404 on every launch and
- * an app that looks wired up when it is not. When the endpoint lands, that one
- * function is the only thing that changes.
- *
- * Until then the app keeps its unread badge current by polling
- * `/notifications`, which is a real endpoint and works today.
+ * The unread badge still comes from polling `/notifications` while the app is
+ * open; push carries its own badge count for when it is not.
  */
 
 /** Type-only, so importing the types does not pull the module in at runtime. */
@@ -146,16 +146,42 @@ export function onNotificationTapped(
 }
 
 /**
- * Where the device token will be sent once the API can receive it.
+ * Hands the device token to the API so notifications can reach this handset.
  *
- * Intentionally inert. See the note at the top of this file: a fabricated
- * endpoint is worse than an honest gap.
+ * `PUT`, because this runs on every cold start and registering the same
+ * handset twice must be idempotent. The server reassigns the token to whoever
+ * is signed in now, which is what stops a previous account's leads ringing
+ * here after a sign-out.
+ *
+ * Never throws. A handset that could not register still has the in-app
+ * notification list, and failing a launch over a push registration would trade
+ * a missing convenience for a broken app.
  */
-export async function registerDeviceToken(_token: string): Promise<void> {
-  if (__DEV__) {
-    console.warn(
-      '[push] Device token obtained but not sent: the Ruvik API has no endpoint to store it yet.',
-    );
+export async function registerDeviceToken(token: string): Promise<void> {
+  try {
+    await api.put('/account/devices', {
+      token,
+      platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
+    });
+  } catch (err) {
+    if (__DEV__) console.warn('[push] Could not register device token:', err);
+  }
+}
+
+/**
+ * Releases this handset on sign-out.
+ *
+ * Best-effort on purpose, and deliberately *not* the only defence: the server
+ * also reassigns a token when the next person registers it, because a sign-out
+ * with no connectivity cannot reach this endpoint at all.
+ */
+export async function unregisterDeviceToken(): Promise<void> {
+  try {
+    const registration = await registerForPush();
+    if (!registration.token) return;
+    await api.del('/account/devices', undefined, { token: registration.token });
+  } catch (err) {
+    if (__DEV__) console.warn('[push] Could not unregister device token:', err);
   }
 }
 

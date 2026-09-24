@@ -21,7 +21,24 @@ interface Plan {
   interval: string;
   maxServices: number | null;
   features: string[];
+  /**
+   * Capabilities this plan grants that have no code behind them yet, named by
+   * the server from the one list that knows. Rendered because every `feature`
+   * line below gets a tick, and a tick beside something the product cannot do
+   * is a claim rather than a roadmap.
+   */
+  unimplemented?: string[];
 }
+
+/** Capability codes read as identifiers; these are what a customer calls them. */
+const CAPABILITY_LABELS: Record<string, string> = {
+  fiscal_reports: 'Tax report export',
+  tax_estimates: 'Quarterly tax estimates',
+  team_members: 'Assistants and employees',
+  payment_gateway: 'Automatic payment recording',
+  advanced_backup: 'Advanced cloud backup',
+  priority_support: 'Priority support',
+};
 
 interface Subscription {
   id: string;
@@ -186,6 +203,16 @@ export function SubscriptionScreen() {
                       </li>
                     ))}
                   </ul>
+
+                  {plan.unimplemented && plan.unimplemented.length > 0 && (
+                    <p className="tiny subtle mt-2" style={{ margin: 'var(--s2) 0 0' }}>
+                      Not built yet:{' '}
+                      {plan.unimplemented
+                        .map((c) => CAPABILITY_LABELS[c] ?? c.replace(/_/g, ' '))
+                        .join(', ')}
+                      .
+                    </p>
+                  )}
 
                   {!isCurrent && (
                     <div className="mt-4">

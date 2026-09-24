@@ -4,6 +4,7 @@ import { writeAudit } from '../../lib/audit.js';
 import { enqueue } from '../../lib/queue.js';
 import { notify } from '../notifications/service.js';
 import { randomToken } from '../../lib/crypto.js';
+import { UNIMPLEMENTED_CAPABILITIES, type Capability } from './entitlements.js';
 
 /**
  * Days a provider keeps their listing after a charge fails.
@@ -64,6 +65,19 @@ export async function listPlans() {
       maxTeamMembers: p.max_team_members,
     },
     capabilities: p.capabilities ?? [],
+    /**
+     * Which of this plan's capabilities have nothing behind them yet.
+     *
+     * Derived here rather than left to each screen, and derived from the code
+     * rather than from the catalogue, so an admin adding `fiscal_reports` to a
+     * new tier cannot accidentally advertise a feature as working. The pricing
+     * cards render every `feature` string with a tick; without this they tick
+     * things the product cannot do, which stops being a roadmap problem and
+     * starts being a misrepresentation the moment money changes hands.
+     */
+    unimplemented: ((p.capabilities ?? []) as Capability[]).filter((c) =>
+      UNIMPLEMENTED_CAPABILITIES.includes(c),
+    ),
     features: p.features,
     // Kept beside `limits` so the existing web and mobile screens keep working
     // while they move over to the grouped shape.

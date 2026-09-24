@@ -32,6 +32,31 @@ export async function notify(
     [userId, input.type, input.title, input.body, JSON.stringify(input.data ?? {})],
   );
 
+  /*
+   * Push, to whatever devices the recipient has registered.
+   *
+   * Queued unconditionally rather than gated on "does this user have a
+   * device?": that question needs a query, the handler has to ask it anyway to
+   * know where to send, and asking twice would mean a notification created
+   * inside a transaction could miss a device registered moments earlier. A
+   * recipient with no devices costs one cheap lookup and the job ends.
+   *
+   * Deduped on the notification id so a retry of the enclosing work cannot
+   * ring the same handset twice for the same event.
+   */
+  await enqueue(
+    'notification.push',
+    {
+      userId,
+      notificationId: rows[0].id,
+      title: input.title,
+      body: input.body,
+      data: { ...(input.data ?? {}), type: input.type, notificationId: rows[0].id },
+    },
+    { dedupeKey: `push:${rows[0].id}` },
+    client,
+  );
+
   if (input.whatsapp) {
     await enqueue(
       'whatsapp.send',

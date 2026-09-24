@@ -123,6 +123,14 @@ Responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`.
 | GET | `/providers/:slug` | Profile, active listings, reviews, portfolio |
 | GET | `/services/:id` | Listing detail |
 
+### Verification — public
+
+The link printed in the footer of every quote and invoice PDF.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/verify/:kind/:id` | `kind`: `quote` \| `invoice`. Returns issuer, number, date, total, status and the PDF's SHA-256. Drafts and unknown ids both `404`. No client, contact or line-item detail. |
+
 ### Provider — `/provider` (role: provider)
 
 | Method | Path | Notes |
@@ -184,6 +192,8 @@ Responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`.
 | Method | Path | Notes |
 |---|---|---|
 | GET/PATCH | `/profile` | |
+| PUT | `/devices` | Registers a push token. Idempotent; reassigns a handset to the caller |
+| DELETE | `/devices` | Releases a handset on sign-out. Scoped to the caller's own tokens |
 | GET | `/whatsapp-consent` | |
 | POST | `/whatsapp-consent` | Requires `acknowledged: true` |
 | DELETE | `/whatsapp-consent` | Immediate opt-out |

@@ -73,19 +73,30 @@ const PLANS = [
     interval: 'month',
     sort: 20,
     tagline: 'For the working professional.',
-    description: 'No caps, and the tax paperwork handled.',
+    description: 'No caps on the work, and the tax paperwork on the way.',
     maxClients: null,
     maxReceipts: null,
     maxServices: 25,
     maxQuotes: null,
     maxTeamMembers: 1,
     capabilities: ['fiscal_reports', 'tax_estimates', 'priority_support'],
+    /*
+     * The copy says what is built and what is not.
+     *
+     * `fiscal_reports` and `tax_estimates` are entitlements with no code behind
+     * them yet — `UNIMPLEMENTED_CAPABILITIES` is the list — and the pricing
+     * cards tick every line in this array. A plain "Export tax reports" is
+     * therefore a claim the product cannot honour, and the day billing goes
+     * live it stops being a roadmap note and becomes something a customer paid
+     * for and did not get. The API also flags these per plan, so a screen can
+     * mark them; this makes the sentence itself honest wherever it is rendered.
+     */
     features: [
       'Unlimited clients and receipts',
-      'Export tax reports',
-      'Estimated quarterly taxes, calculated',
-      'Priority support',
       'Everything in Starter, uncapped',
+      'Priority support',
+      'Export tax reports — coming soon',
+      'Estimated quarterly taxes — coming soon',
     ],
   },
   {
@@ -95,7 +106,7 @@ const PLANS = [
     interval: 'month',
     sort: 30,
     tagline: 'For when it is not just you.',
-    description: 'Bring in help, and let the income record itself.',
+    description: 'Everything in Pro, with room for help as it lands.',
     maxClients: null,
     maxReceipts: null,
     maxServices: null,
@@ -105,12 +116,13 @@ const PLANS = [
       'fiscal_reports', 'tax_estimates', 'priority_support',
       'team_members', 'payment_gateway', 'advanced_backup',
     ],
+    /* Four of these five are unbuilt. See the note on the Pro plan above. */
     features: [
       'Everything in Pro',
-      'Add an assistant or employee',
-      'Card payments recorded automatically',
-      'Advanced cloud backup',
       'No caps anywhere',
+      'Add an assistant or employee — coming soon',
+      'Card payments recorded automatically — coming soon',
+      'Advanced cloud backup — coming soon',
     ],
   },
 ];
