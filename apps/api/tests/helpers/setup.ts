@@ -135,7 +135,20 @@ export async function createAdmin(app: Express, email = 'admin@test.local'): Pro
  */
 export async function elevateToMfa(user: TestUser): Promise<string> {
   const { signAccessToken } = await import('../../src/lib/tokens.js');
-  return signAccessToken({ userId: user.id, role: 'admin', aal: 'mfa' });
+  const { getDb } = await import('../../src/db/index.js');
+
+  // The role is read from the database rather than assumed to be 'admin'.
+  // `authenticate` compares the token's role against the stored one and
+  // rejects a mismatch as a stale session — so a hard-coded role here silently
+  // broke every elevated request for any account that was not an admin.
+  const db = await getDb();
+  const { rows } = await db.query<{ role: 'admin' | 'master' | 'provider' | 'customer' }>(
+    'SELECT role FROM users WHERE id = $1',
+    [user.id],
+  );
+  if (!rows[0]) throw new Error(`no user to elevate: ${user.id}`);
+
+  return signAccessToken({ userId: user.id, role: rows[0].role, aal: 'mfa' });
 }
 
 /**

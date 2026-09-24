@@ -2,8 +2,9 @@ import {
   createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode,
 } from 'react';
 import { api, setAccessToken, setUnauthorizedHandler, refreshSession } from '../lib/api';
+import type { Role } from '../lib/roles';
 
-export type Role = 'admin' | 'provider' | 'customer';
+export type { Role } from '../lib/roles';
 
 export interface AuthUser {
   id: string;

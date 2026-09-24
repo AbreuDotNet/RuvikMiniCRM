@@ -9,7 +9,10 @@ const ISSUER = 'ruvik';
 const AUDIENCE = 'ruvik-api';
 const secretKey = new TextEncoder().encode(env.JWT_ACCESS_SECRET);
 
-export type Role = 'admin' | 'provider' | 'customer';
+// Re-exported from the one place the role hierarchy lives, so a token can
+// never carry a role the guards do not know about.
+export type { Role } from './roles.js';
+import type { Role } from './roles.js';
 
 export interface AccessClaims extends JWTPayload {
   sub: string;

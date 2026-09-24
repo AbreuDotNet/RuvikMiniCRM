@@ -115,11 +115,45 @@ function toEntitlements(row: PlanRow, live: boolean): Entitlements {
  * grace period, and cutting someone off mid-grace would make the grace
  * meaningless.
  */
+/**
+ * Entitlements for the platform owner: everything, uncapped.
+ *
+ * Resolved from the provider's owning user rather than passed in by the
+ * caller, so the rule holds at every call site without any of them having to
+ * know about it. A route that forgot to pass a role would silently cap the
+ * owner; a route cannot forget to have an owner.
+ */
+const MASTER_ENTITLEMENTS = (planId: string, planName: string): Entitlements => ({
+  planId,
+  planCode: 'master',
+  planName,
+  subscriptionStatus: null,
+  fromLiveSubscription: false,
+  limits: {
+    maxClients: null,
+    maxReceiptsPerMonth: null,
+    maxServices: null,
+    maxQuotesPerMonth: null,
+    maxTeamMembers: Number.MAX_SAFE_INTEGER,
+  },
+  capabilities: [...CAPABILITIES],
+});
+
 export async function getEntitlements(
   providerId: string,
   c: Queryable | null = null,
 ): Promise<Entitlements> {
   const db = c ?? (await getDb());
+
+  // The owner check comes first, because for a master the answer is the same
+  // whatever their subscription says — including when they have none.
+  const { rows: owner } = await db.query<{ role: string }>(
+    `SELECT u.role FROM providers p JOIN users u ON u.id = p.user_id WHERE p.id = $1`,
+    [providerId],
+  );
+  if (owner[0]?.role === 'master') {
+    return MASTER_ENTITLEMENTS(providerId, 'Master');
+  }
 
   const { rows } = await db.query<PlanRow>(
     `SELECT sp.id, sp.code, sp.name,

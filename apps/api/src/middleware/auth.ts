@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken, type Role } from '../lib/tokens.js';
+import { verifyAccessToken } from '../lib/tokens.js';
+import { actsAs, actsAsAny, type Role } from '../lib/roles.js';
 import { getDb } from '../db/index.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { env } from '../config/env.js';
@@ -83,10 +84,18 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
   next();
 }
 
+/**
+ * Gates a route to a set of roles.
+ *
+ * Membership is decided by the containment table in `lib/roles.ts`, not by
+ * `roles.includes(...)`. That is what lets master act as every role without
+ * every call site having to remember to list it — and it means adding a role
+ * above master later is one edit rather than a search.
+ */
 export function requireRole(...roles: Role[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.auth) return next(unauthorized());
-    if (!roles.includes(req.auth.role)) return next(forbidden());
+    if (!actsAsAny(req.auth.role, roles)) return next(forbidden());
     next();
   };
 }
@@ -123,7 +132,9 @@ export function requireMfa(req: Request, _res: Response, next: NextFunction) {
 export async function requireProvider(req: Request, _res: Response, next: NextFunction) {
   try {
     if (!req.auth) throw unauthorized();
-    if (req.auth.role !== 'provider') throw forbidden('This area is for service providers.');
+    if (!actsAs(req.auth.role, 'provider')) {
+      throw forbidden('This area is for service providers.');
+    }
 
     let providerId = req.auth.providerId;
     if (!providerId) {
@@ -132,6 +143,10 @@ export async function requireProvider(req: Request, _res: Response, next: NextFu
         'SELECT id FROM providers WHERE user_id = $1',
         [req.auth.userId],
       );
+      // Master included: acting as a provider still needs a provider profile
+      // to act *on*. That is a missing prerequisite, not a limit — the
+      // alternative is reading someone else's books, which is impersonation
+      // and needs its own design.
       if (!rows[0]) throw forbidden('Finish setting up your business profile first.');
       providerId = rows[0].id;
       req.auth.providerId = providerId;

@@ -1,6 +1,7 @@
 import { Redirect } from 'expo-router';
 
 import { useAuth } from '../state/auth';
+import { actsAs } from '../utils/roles';
 import { LaunchScreen } from './LaunchScreen';
 import type { Role } from '../types/api';
 
@@ -9,6 +10,9 @@ export const HOME_FOR_ROLE: Record<Role, string> = {
   customer: '/(customer)',
   provider: '/(provider)',
   admin: '/(admin)',
+  // Master lands on the provider surface: it is the one with actual work on
+  // it, and the admin tabs are one tap away from there.
+  master: '/(provider)',
 };
 
 /**
@@ -41,7 +45,10 @@ export function RequireRole({
 
   if (status === 'loading') return <FullScreenLoader />;
   if (status === 'anonymous' || !user) return <Redirect href="/(auth)/sign-in" />;
-  if (user.role !== role) return <Redirect href={HOME_FOR_ROLE[user.role] as never} />;
+  // Containment, not equality: master acts as every role, so comparing with
+  // !== would bounce it out of all three groups — the exact forgotten call
+  // site the shared table exists to prevent.
+  if (!actsAs(user.role, role)) return <Redirect href={HOME_FOR_ROLE[user.role] as never} />;
 
   return <>{children}</>;
 }

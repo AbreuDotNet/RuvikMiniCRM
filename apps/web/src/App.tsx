@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { AuthProvider, useAuth, type Role } from './state/auth';
+import { actsAsAny } from './lib/roles';
 import { ToastProvider, ThemeProvider, useToast } from './state/ui';
 import { registerServiceWorker } from './lib/serviceWorker';
 
@@ -69,13 +70,17 @@ function Protected({ roles, children }: { roles: Role[]; children: ReactNode }) 
   if (status === 'anonymous' || !user) {
     return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
   }
-  if (!roles.includes(user.role)) return <Navigate to={homeFor(user.role)} replace />;
+  // Containment, not membership: master acts as every role, and listing it on
+  // each route would be one <Protected> away from a hole.
+  if (!actsAsAny(user.role, roles)) return <Navigate to={homeFor(user.role)} replace />;
 
   return <>{children}</>;
 }
 
 function homeFor(role: Role): string {
-  if (role === 'provider') return '/dashboard';
+  // Master lands on the provider dashboard: it is the surface with actual work
+  // on it, and every other section is reachable from there.
+  if (role === 'provider' || role === 'master') return '/dashboard';
   if (role === 'admin') return '/admin';
   return '/home';
 }

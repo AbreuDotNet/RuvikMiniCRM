@@ -8,7 +8,9 @@
  * is the server's answer, and the app must not recompute it.
  */
 
-export type Role = 'admin' | 'provider' | 'customer';
+import type { Role } from '../utils/roles';
+
+export type { Role } from '../utils/roles';
 
 export interface AuthUser {
   id: string;

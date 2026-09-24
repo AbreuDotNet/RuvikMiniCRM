@@ -13,13 +13,14 @@ import { writeAudit, verifyAuditChain } from '../../lib/audit.js';
 import { revokeAllForUser } from '../../lib/tokens.js';
 import { notify } from '../notifications/service.js';
 import { queueDepth } from '../../lib/queue.js';
-import { notFound, badRequest, conflict } from '../../lib/errors.js';
+import { notFound, badRequest, conflict, forbidden } from '../../lib/errors.js';
 import {
   EFFECTIVE_STATES, VERIFICATION_STATUSES, PROVIDER_ACTIONS,
   effectiveState, allowedActions, actionForLegacyStatus,
 } from '../../lib/providerLifecycle.js';
 import { applyProviderAction } from './providerService.js';
 import { CAPABILITIES, UNIMPLEMENTED_CAPABILITIES } from '../billing/entitlements.js';
+import { canAdminManage, type Role } from '../../lib/roles.js';
 
 export const adminRouter = Router();
 // Every admin route: authenticated, role-checked, and rate limited tighter
@@ -253,6 +254,17 @@ adminRouter.post(
       [req.params.id],
     );
     if (!rows[0]) throw notFound('User not found.');
+
+    /*
+     * An admin cannot touch a master.
+     *
+     * Without this the hierarchy is decorative: any admin could suspend the
+     * one account above them and the platform would have no owner. A master
+     * acting here passes, because a master may manage anyone.
+     */
+    if (!canAdminManage(req.auth!.role, rows[0].role as Role)) {
+      throw forbidden('This account is above your level.');
+    }
 
     // Idempotent: asking for the status the account already has is a no-op
     // rather than a conflict, because a double-submit must not become an error.

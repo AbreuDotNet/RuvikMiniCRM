@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { getCache } from '../lib/cache.js';
 import { env } from '../config/env.js';
 import { rateLimited } from '../lib/errors.js';
+import { isMaster } from '../lib/roles.js';
 
 export interface RateLimitOptions {
   /** Bucket name, e.g. 'login'. Keeps limits independent per endpoint class. */
@@ -24,6 +25,18 @@ export function clientIp(req: Request): string {
 export function rateLimit(opts: RateLimitOptions) {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!env.RATE_LIMIT_ENABLED) return next();
+
+    /*
+     * Master is exempt from the per-user buckets.
+     *
+     * Only the per-user ones: the buckets keyed by IP — login, signup, refresh
+     * and password reset — still apply, because they run before anyone is
+     * authenticated. There is no role to exempt at the point where someone is
+     * still guessing a password, and that is exactly the protection worth
+     * keeping.
+     */
+    if (isMaster(req.auth?.role) && !opts.keyFn) return next();
+
     try {
       const subject = opts.keyFn ? opts.keyFn(req) : (req.auth?.userId ?? clientIp(req));
       const window = Math.floor(Date.now() / 1000 / opts.windowSeconds);

@@ -412,6 +412,35 @@ export async function seed(): Promise<void> {
     ['admin@ruvik.demo', passwordHash],
   );
 
+  /* ------------------------------- master ------------------------------- */
+
+  /*
+   * The platform owner.
+   *
+   * Seeded rather than creatable through the API: there is no endpoint that
+   * grants this role, because an admin who could grant it would grant it to
+   * themselves. It comes from here, or from a master editing the database.
+   *
+   * It gets a provider profile as well, so the provider surface is reachable
+   * and the "no plan limits" rule is something you can log in and see. The
+   * profile is unpublished — the owner's account is for working on the
+   * product, not for competing in its marketplace.
+   */
+  const { rows: masterRows } = await db.query<{ id: string }>(
+    `INSERT INTO users (email, password_hash, role, full_name, status, email_verified_at)
+     VALUES ($1,$2,'master','Ruvik Owner','active', now())
+     RETURNING id`,
+    ['master@ruvik.demo', passwordHash],
+  );
+  await db.query(
+    `INSERT INTO providers (user_id, business_name, slug, tagline, city, region, country,
+                            verification_status, verified_at, is_published, tax_state,
+                            default_tax_rate_bp)
+     VALUES ($1,'Ruvik Platform',$2,'The house account','Austin','TX','US',
+             'verified', now(), false, 'TX', 825)`,
+    [masterRows[0].id, slugify('Ruvik Platform')],
+  );
+
   /* ----------------------------- customers ------------------------------ */
   const customerIds = new Map<string, string>();
   for (const c of CUSTOMERS) {
@@ -1218,6 +1247,7 @@ async function printAccounts(): Promise<void> {
   console.log('');
   console.log('Customers: ana@ruvik.demo · pedro@ruvik.demo · lucia@ruvik.demo · diego@ruvik.demo');
   console.log('Admin:     admin@ruvik.demo');
+  console.log('Master:    master@ruvik.demo  (no plan limits, acts as every role)');
   console.log('');
   /* eslint-enable no-console */
 }
